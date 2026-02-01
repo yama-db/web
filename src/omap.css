@@ -1,0 +1,16 @@
+@charset "UTF-8";
+@import '../node_modules/ol/ol.css';
+@import '../node_modules/ol-layerswitcher/dist/ol-layerswitcher.css';
+@import '../node_modules/ol-popup/src/ol-popup.css';
+@import 'ol-popup-custom.css';
+body {
+  font-family: sans-serif;
+}
+.layer-switcher div.panel {
+  padding: 0;
+  font: 12px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif;
+}
+.layer-switcher div.panel ul {
+  margin: 0;
+  padding: 0;
+}

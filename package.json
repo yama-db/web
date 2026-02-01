@@ -1,0 +1,39 @@
+{
+  "name": "yama-db-web",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A comprehensive Japanese mountain map, powered by OpenLayers",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint 'src/*.js'",
+    "minify": "cleancss -o css/omap.css src/omap.css",
+    "build": "vite build --emptyOutDir",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yama-db/web.git"
+  },
+  "author": "Nyanta Anineco <anineco@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yama-db/web/issues"
+  },
+  "homepage": "https://github.com/yama-db/web#readme",
+  "devDependencies": {
+    "eslint": "^9.29.0",
+    "vite": "^7.0.0",
+    "vite-plugin-env-compatible": "^2.0.1"
+  },
+  "dependencies": {
+    "ol": "^10.6.1",
+    "ol-layerswitcher": "^4.1.2",
+    "ol-popup": "^5.1.1"
+  },
+  "browserslist": [
+    "defaults"
+  ]
+}
