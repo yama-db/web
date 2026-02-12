@@ -67,3 +67,6 @@
   padding-right: 1em;
   color: blue;
 }
+.ol-popup-content td:nth-child(2) {
+  white-space: pre;
+}

@@ -17,8 +17,7 @@ export default defineConfig({
     outDir,
     rollupOptions: {
       input: {
-        omap_geojson: resolve(root, 'index.html'),
-        // omap_pbf: resolve(root, 'omap_pbf.html'),
+        omap: resolve(root, 'index.html')
       }
     }
   }

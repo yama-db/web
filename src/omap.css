@@ -3,14 +3,81 @@
 @import '../node_modules/ol-layerswitcher/dist/ol-layerswitcher.css';
 @import '../node_modules/ol-popup/src/ol-popup.css';
 @import 'ol-popup-custom.css';
+@import './centercross.css';
+@import './searchbar.css';
+
+:root {
+  --ol-foreground-color: white;
+  --ol-subtle-foreground-color: white;
+  --ol-background-color: rgba(0,60,136,.5);
+  --ol-partial-background-color: rgba(0,60,136,.5);
+}
+
 body {
   font-family: sans-serif;
 }
+
 .layer-switcher div.panel {
   padding: 0;
   font: 12px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif;
 }
+
 .layer-switcher div.panel ul {
   margin: 0;
   padding: 0;
+}
+
+.ol-searchbar form div:last-child {
+  position: absolute;
+  right: 8px;
+}
+
+#tb_query { width: 12.5rem; }
+
+#result > div {
+  max-height: calc(50vh - 150px);
+  overflow-y: auto;
+}
+
+@media screen and (min-width: 865px) {
+  #result > div {
+    max-height: calc(100vh - 480px);
+  }
+}
+
+#result table,
+#result th,
+#result td {
+  border: 1px solid gray;
+  border-collapse: collapse;
+  font-weight: normal;
+  line-height: 1rem;
+}
+
+#result th:nth-child(1) {
+  width: 3rem;
+}
+
+#result th:nth-child(2) {
+  width: 11rem;
+}
+
+#result th:nth-child(3) {
+  width: 2rem;
+}
+
+#result td:nth-child(1) {
+  text-align: right;
+  text-decoration: underline;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#result td:nth-child(2) {
+  text-align: left;
+}
+
+#result td:nth-child(3) {
+  text-align: right;
+  white-space: nowrap;
 }

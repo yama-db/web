@@ -1,0 +1,63 @@
+@charset "UTF-8";
+div.ol-searchbar {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 100%;
+  font-size: 0.875rem;
+}
+div.ol-searchbar > div {
+  padding: 2px 8px;
+  color: var(--ol-foreground-color);
+  background: var(--ol-background-color);
+}
+div.ol-searchbar > h1 {
+  margin: 0;
+  padding: 2px 8px;
+  font-size: 1rem;
+  text-align: center;
+  color: white;
+  background: rgba(43,69,69,.9);
+}
+@media screen and (min-width: 375px) {
+  div.ol-searchbar {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 320px;
+    padding: 2px;
+    border-radius: 4px;
+    background-color: rgba(255,255,255,.4);
+  }
+  div.ol-searchbar > h1,
+  div.ol-searchbar > div {
+    margin: 1px;
+    border: 2px;
+    border-radius: 2px;
+  }
+}
+.ol-searchbar label {
+  display: inline-block;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+.ol-searchbar input,
+.ol-searchbar button,
+.ol-searchbar select {
+  margin: 2px 3px;
+  padding: 1px 4px;
+  border: none;
+  border-radius: 4px;
+  color: #000;
+  background-color: #fff;
+}
+.ol-searchbar button {
+  cursor: pointer;
+}
+.ol-searchbar button {
+  display: inline-block;
+  width: auto;
+  text-align: center;
+}
