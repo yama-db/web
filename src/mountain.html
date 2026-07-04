@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>山名一覧</title>
-    <script type="module" src="omap.js"></script>
-    <link rel="stylesheet" href="omap.css">
+    <title>山名一覧 on the Web地図</title>
+    <script type="module" src="mountain.js"></script>
+    <link rel="stylesheet" href="mountain.css">
     <style>
       html, body, #map { margin:0; padding:0; border:0; width:100%; height:100%; }
     </style>
@@ -13,6 +13,27 @@
   <body>
     <div id="map">
       <div id="centercross"></div>
+      <div id="toolbar">
+        <h1>山名一覧 on the Web地図</h1>
+        <div id="menu1">
+          <div style="display:flex;">
+            <button id="tb_menu2" title="メニュー" type="button">≡</button>
+            <button id="tb_center" title="中心座標" type="button">⌖</button>
+            <select id="tb_base" title="マップ"></select>
+            <select id="tb_zoom" title="ズーム"></select>
+            <button id="tb_help" title="ヘルプ" type="button">ⓘ</button>
+            <button id="tb_exit" type="button"></button>
+          </div>
+        </div>
+        <div id="menu2" style="display:none;">
+          <div style="display:flex;">
+            <input id="tb_sanmei" type="checkbox" checked>
+            <label for="tb_sanmei">山名</label>
+            <input id="tb_cross" type="checkbox" checked>
+            <label for="tb_cross">中心十字</label>
+          </div>
+        </div>
+      </div>
       <div id="searchbar">
         <div>
           <form name="form1" action="" style="display:flex;">

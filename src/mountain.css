@@ -4,6 +4,7 @@
 @import '../node_modules/ol-popup/src/ol-popup.css';
 @import 'ol-popup-custom.css';
 @import './centercross.css';
+@import './toolbar.css';
 @import './searchbar.css';
 
 :root {
@@ -17,19 +18,10 @@ body {
   font-family: sans-serif;
 }
 
-.layer-switcher div.panel {
-  padding: 0;
-  font: 12px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif;
-}
-
-.layer-switcher div.panel ul {
-  margin: 0;
-  padding: 0;
-}
-
-.ol-searchbar form div:last-child {
-  position: absolute;
-  right: 8px;
+#tb_exit,
+#tb_result,
+form[name="form2"] > :last-child {
+  margin-left: auto;
 }
 
 #tb_query { width: 12.5rem; }

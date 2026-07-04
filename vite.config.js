@@ -17,7 +17,7 @@ export default defineConfig({
     outDir,
     rollupOptions: {
       input: {
-        omap: resolve(root, 'index.html')
+        mountain: resolve(root, 'mountain.html')
       }
     }
   }

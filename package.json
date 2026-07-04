@@ -9,7 +9,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint 'src/*.js'",
-    "minify": "cleancss -o css/omap.css src/omap.css",
+    "minify": "cleancss -o css/mountain.css src/mountain.css",
     "build": "vite build --emptyOutDir",
     "preview": "vite preview"
   },
@@ -25,17 +25,20 @@
   "homepage": "https://github.com/yama-db/web#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.0.0",
-    "globals": "^17.3.0",
-    "vite": "^7.3.1",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "vite": "^8.1.3",
     "vite-plugin-env-compatible": "^2.0.1"
   },
   "dependencies": {
-    "ol": "^10.7.0",
+    "ol": "^10.9.0",
     "ol-layerswitcher": "^4.1.2",
     "ol-popup": "^5.1.1"
   },
   "browserslist": [
     "defaults"
-  ]
+  ],
+  "allowScripts": {
+    "fsevents@2.3.3": true
+  }
 }
