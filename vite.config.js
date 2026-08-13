@@ -3,9 +3,9 @@ import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import env from 'vite-plugin-env-compatible';
 
-const root = resolve(__dirname, 'src');
+const root = resolve(import.meta.dirname, 'src');
 const base = './';
-const outDir = resolve(__dirname, 'dist');
+const outDir = resolve(import.meta.dirname, 'dist');
 
 export default defineConfig({
   root,
