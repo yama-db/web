@@ -2,6 +2,9 @@
 import Control from 'ol/control/Control';
 import {toLonLat} from 'ol/proj';
 import {formatDEG} from './transangle.js';
+import category from './category.json';
+
+console.log(category);
 
 // const share = import.meta.env.VITE_SHARE;
 const api_base = '/~tad/test';
@@ -175,6 +178,13 @@ export default class Toolbar extends Control {
         element.dispatchEvent(new Event('change'));
       }
     }, passive);
+  }
+
+  setSourceSelect(target_id) {
+    const element = document.getElementById(target_id);
+    category.forEach(({ id, display_name }) => {
+      element.appendChild(new Option(display_name, id));
+    });
   }
 
   setCreditButton(id, url) {

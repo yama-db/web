@@ -20,6 +20,7 @@ body {
 
 #tb_exit,
 #tb_result,
+#tb_source,
 form[name="form2"] > :last-child {
   margin-left: auto;
 }

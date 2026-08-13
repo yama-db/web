@@ -1,0 +1,176 @@
+[
+  {
+    "id": 1,
+    "info_type": "DATASET",
+    "display_name": "基盤地図",
+    "source_table": "stg_gsi_gcp_pois"
+  },
+  {
+    "id": 2,
+    "info_type": "DATASET",
+    "display_name": "1003山",
+    "source_table": "stg_gsi_1003_pois"
+  },
+  {
+    "id": 3,
+    "info_type": "DATASET",
+    "display_name": "数値地図",
+    "source_table": "stg_gsi_dm25k_pois"
+  },
+  {
+    "id": 4,
+    "info_type": "DATASET",
+    "display_name": "地形図",
+    "source_table": "stg_gsi_vtexp_pois"
+  },
+  {
+    "id": 5,
+    "info_type": "DATASET",
+    "display_name": "ウィキ",
+    "source_table": "stg_wikidata_pois"
+  },
+  {
+    "id": 6,
+    "info_type": "DATASET",
+    "display_name": "ヤマップ",
+    "source_table": "stg_yamap_pois"
+  },
+  {
+    "id": 7,
+    "info_type": "DATASET",
+    "display_name": "ヤマレコ",
+    "source_table": "stg_yamareco_pois"
+  },
+  {
+    "id": 9,
+    "info_type": "DATASET",
+    "display_name": "その他",
+    "source_table": "stg_legacy_pois"
+  },
+  {
+    "id": 10,
+    "info_type": "BOOK",
+    "display_name": "静岡の百山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 11,
+    "info_type": "BOOK",
+    "display_name": "石川の山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 12,
+    "info_type": "BOOK",
+    "display_name": "大分の山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 13,
+    "info_type": "BOOK",
+    "display_name": "大分300山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 14,
+    "info_type": "BOOK",
+    "display_name": "大分250山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 15,
+    "info_type": "BOOK",
+    "display_name": "奈良名山案内",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 16,
+    "info_type": "BOOK",
+    "display_name": "富山県山名録",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 17,
+    "info_type": "BOOK",
+    "display_name": "福井の山150",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 18,
+    "info_type": "BOOK",
+    "display_name": "房総山岳志",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 19,
+    "info_type": "BOOK",
+    "display_name": "防長百山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 20,
+    "info_type": "BOOK",
+    "display_name": "鈴鹿万能ガイド",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 21,
+    "info_type": "BOOK",
+    "display_name": "群馬300上巻",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 22,
+    "info_type": "BOOK",
+    "display_name": "群馬300下巻",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 23,
+    "info_type": "BOOK",
+    "display_name": "栃木273山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 24,
+    "info_type": "BOOK",
+    "display_name": "桐生100山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 25,
+    "info_type": "BOOK",
+    "display_name": "ひろしま百山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 26,
+    "info_type": "BOOK",
+    "display_name": "兵庫100山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 27,
+    "info_type": "BOOK",
+    "display_name": "京都府山岳総覧",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 28,
+    "info_type": "BOOK",
+    "display_name": "岩手の山150",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 29,
+    "info_type": "BOOK",
+    "display_name": "ぎふ百山",
+    "source_table": "stg_book_web_pois"
+  },
+  {
+    "id": 30,
+    "info_type": "BOOK",
+    "display_name": "続ぎふ百山",
+    "source_table": "stg_book_web_pois"
+  }
+]

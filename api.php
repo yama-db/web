@@ -200,6 +200,11 @@ if ($resource === 'mountains') {
                 $m[0] = str_replace('%', '', $m[0]);
                 $m[0] = ($starts ? '%' : '') . $m[0] . ($ends ? '%' : '');
             }
+            $m[0] = str_replace(
+                mb_str_split("篭桧莱壷欝呑屏溪渕秃剥薮﨔繩蝉掴頬箪彌權嶽曾棧", 1, 'UTF-8'),
+                mb_str_split("籠檜萊壺鬱吞屛渓淵禿剝藪欅縄蟬摑頰簞弥権岳曽桟", 1, 'UTF-8'),
+                $m[0]
+            );
 
             $bind_params = [];
             if (count($m) == 2) {
@@ -365,16 +370,33 @@ if ($resource === 'mountains') {
 
         // 別途、情報源（ソースのオーソリティ）の display_name を取得してマージ
         $sql = <<<EOS
-            SELECT DISTINCT isrc.display_name AS auth
-            FROM poi_names AS pn
-            JOIN information_sources AS isrc ON isrc.id = pn.source_id
-            WHERE pn.mountain_id = ? AND pn.is_preferred
-            LIMIT 1
+            SELECT 
+                GROUP_CONCAT(
+                    s.display_name 
+                    ORDER BY s.reliability_level ASC, s.id ASC 
+                    SEPARATOR ','
+                ) AS auth_list
+            FROM poi_names AS p
+            JOIN (
+                SELECT mountain_id, poi_name, poi_kana
+                FROM poi_names
+                WHERE is_preferred = 1
+                AND mountain_id = ?
+            ) AS pref
+            ON p.mountain_id = pref.mountain_id
+            AND p.poi_name = pref.poi_name
+            AND p.poi_kana = pref.poi_kana
+            JOIN information_sources AS s 
+            ON p.source_id = s.id
+            GROUP BY 
+                p.mountain_id,
+                p.poi_name,
+                p.poi_kana;
         EOS;
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$mountain_id]);
         $auth_row = $stmt->fetch();
-        $results['auth'] = $auth_row['auth'] ?? 'Unknown';
+        $results['auth_list'] = $auth_row['auth_list'] ?? 'Unknown';
 
         # 親要素があればその名称を取得
         $sql = <<<EOS
@@ -389,12 +411,21 @@ if ($resource === 'mountains') {
 
         # 別名を取得
         $sql = <<<EOS
-            SELECT DISTINCT p.poi_name AS name, p.poi_kana AS kana
+            SELECT 
+                p.poi_name AS name,
+                p.poi_kana AS kana,
+                GROUP_CONCAT(
+                    s.display_name
+                    ORDER BY s.reliability_level ASC,
+                    s.id ASC SEPARATOR ','
+                ) AS auth_list
             FROM mountain_pois AS m
             JOIN poi_names AS p ON m.id = p.mountain_id
+            JOIN information_sources AS s ON p.source_id = s.id
             WHERE p.poi_kana IS NOT NULL AND p.poi_kana <> ''
                 AND NOT (p.poi_name = m.main_name AND p.poi_kana = m.main_kana)
                 AND m.id = ?
+            GROUP BY p.poi_name, p.poi_kana;
             EOS;
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$mountain_id]);

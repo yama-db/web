@@ -149,6 +149,7 @@ toolbar.setZoomSelect('tb_zoom', (zoom) => {
   current_zoom = zoom;
   sanmei.getSource().changed();
 });
+// toolbar.setSourceSelect('tb_source');
 toolbar.setCreditButton('tb_help', 'help.html');
 toolbar.setLayerCheckbox('tb_sanmei', sanmei);
 toolbar.setControlCheckbox('tb_cross', centercross);
@@ -275,25 +276,29 @@ async function getMountainDetail(id) {
 }
 
 function displayMountainInfo(data) {
+  // 別名のうち、山域に含まれるものは除外する
+  const filtered_aliases = data.aliases.filter(
+    a => !data.parent.some(p => p.name === a.name)
+  );
   const tbody = document.getElementById('mountain-info');
   tbody.replaceChildren();
   const fields = [
     { label: 'よみ', value: data.kana },
+    { label: '出典', value: data.auth_list },
     { label: '山域', value: data.parent },
-    { label: '別名', value: data.aliases },
+    { label: '別称', value: filtered_aliases },
     { label: '点名', value: data.gcp_name },
     { label: '標高', value: data.elev + ' m' },
     { label: '緯度', value: todms(data.lat) },
     { label: '経度', value: todms(data.lon) },
     { label: '所在', value: data.address.map(x => x.full_name).join('\n') },
-    { label: '出典', value: data.auth },
     { label: 'ID', value: data.id }
   ];
   fields.forEach(function (field) {
     if (field.label === '山域' && field.value.length == 0) {
       return;
     }
-    if (field.label === '別名' && field.value.length == 0) {
+    if (field.label === '別称' && field.value.length == 0) {
       return;
     }
     if (field.label === '点名' && !field.value) {
@@ -304,13 +309,31 @@ function displayMountainInfo(data) {
     c1.textContent = field.label;
     tr.appendChild(c1);
     const c2 = document.createElement('td');
-    if (field.label === '山域' || field.label === '別名') {
+    if (field.label === '山域') {
       field.value.forEach(function (item, index) {
         if (index > 0) {
           c2.appendChild(document.createElement('br'));
         }
         displaySanmei(c2, item.name, item.kana);
       });
+    } else if (field.label === '別称') {
+      field.value.forEach(function (item, index) {
+        if (index > 0) {
+          c2.appendChild(document.createElement('br'));
+        }
+        displaySanmei(c2, item.name, item.kana);
+        c2.appendChild(document.createTextNode('（'));
+        const span = document.createElement('span');
+        span.title = item.auth_list;
+        span.textContent = item.auth_list.split(',')[0];
+        c2.appendChild(span);
+        c2.appendChild(document.createTextNode('）'));
+      });
+    } else if (field.label === '出典') {
+      const span = document.createElement('span');
+      span.title = field.value;
+      span.textContent = field.value.split(',')[0];
+      c2.appendChild(span);
     } else {
       c2.textContent = field.value;
     }
