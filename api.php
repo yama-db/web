@@ -4,6 +4,47 @@ if ($_SERVER['HTTP_SEC_FETCH_MODE'] != 'cors') {
     exit;
 }
 
+$env_path = $_SERVER['ENV_PATH'] ?? __DIR__ . '/.env.php';
+if (file_exists($env_path)) {
+    $config = require $env_path;
+    foreach ($config as $key => $value) {
+        if (!isset($_SERVER[$key])) {
+            $_SERVER[$key] = $value;
+        }
+    }
+}
+$host = $_SERVER['DB_HOST'] ?? 'localhost';
+$port = $_SERVER['DB_PORT'] ?? 3306;
+$user = $_SERVER['DB_USER'] ?? null;
+$pass = $_SERVER['DB_PASS'] ?? null;
+$dbname = $_SERVER['DB_NAME'] ?? null;
+$dsn = "mysql:host={$host};dbname={$dbname};port={$port};charset=utf8mb4";
+if (!$user || !$pass || !$dbname) {
+    http_response_code(500);
+    echo json_encode([
+        "error" => "Database configuration is missing. Please check the .env.php file."
+    ]);
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] == 'GET') {
+    $dsn .= ';readOnly=1;readTimeout=5';
+}
+
+try {
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ];
+    $pdo = new PDO($dsn, $user, $pass, $options);
+} catch (PDOException $e) {
+    http_response_code(500);
+    echo json_encode([
+        "error" => "Database connection error: " . $e->getMessage()
+    ]);
+    exit;
+}
+
 function get_lat_lon()
 {
     $args = [
@@ -19,57 +60,12 @@ function get_lat_lon()
     return filter_input_array(INPUT_GET, $args);
 }
 
-function get_db_config()
-{
-    $cnf_path = '.my.cnf'; 
-    if (!file_exists($cnf_path)) return null;
-    $config = parse_ini_file($cnf_path, true, INI_SCANNER_RAW);
-    $client = isset($config['client']) ? $config['client'] : null;
-    if (!$client) return null;
-    $host = $client['host'] ?? 'localhost';
-    $port = $client['port'] ?? 3306;
-    $dbname = $client['database'] ?? '';
-    $dsn = "mysql:host={$host};dbname={$dbname};port={$port};charset=utf8mb4";
-    if ($_SERVER['REQUEST_METHOD'] == 'GET') {
-        $dsn .= ';readOnly=1;readTimeout=5';
-    }
-    return [
-        'dsn' => $dsn,
-        'user' => $client['user'] ?? '',
-        'pass' => $client['password'] ?? ''
-    ];
-}
-
-$db_config = get_db_config();
-if (!$db_config) {
-    http_response_code(500);
-    echo json_encode([
-        "error" => "Configuration file (.my.cnf) not found or invalid"
-    ]);
-    exit;
-}
-
-try {
-    $options = [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ];
-    $pdo = new PDO($db_config['dsn'], $db_config['user'], $db_config['pass'], $options);
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode([
-        "error" => "Database connection error: " . $e->getMessage()
-    ]);
-    exit;
-}
-
 $request_uri = $_SERVER['REQUEST_URI'];
 $method = $_SERVER['REQUEST_METHOD'];
 $api_path = parse_url($request_uri, PHP_URL_PATH);
-$base_path = '/~tad/test'; # CONFIG: API base path
-if (str_starts_with($api_path, $base_path)) {
-    $api_path = substr($api_path, strlen($base_path));
+$api_base = $_SERVER['API_BASE'] ?? '/v2';
+if (str_starts_with($api_path, $api_base)) {
+    $api_path = substr($api_path, strlen($api_base));
 }
 $segments = explode('/', trim($api_path, '/'));
 if ($segments[0] !== 'api') {
@@ -200,9 +196,18 @@ if ($resource === 'mountains') {
                 $m[0] = str_replace('%', '', $m[0]);
                 $m[0] = ($starts ? '%' : '') . $m[0] . ($ends ? '%' : '');
             }
+            $sql = <<<EOS
+                SELECT src_char, dst_char
+                FROM char_trans_map
+                WHERE hit_count > 0
+                ORDER BY hit_count DESC
+            EOS;
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute();
+            $trans_map = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
             $m[0] = str_replace(
-                mb_str_split("篭桧莱壷欝呑屏溪渕秃剥薮﨔繩蝉掴頬箪彌權嶽曾棧", 1, 'UTF-8'),
-                mb_str_split("籠檜萊壺鬱吞屛渓淵禿剝藪欅縄蟬摑頰簞弥権岳曽桟", 1, 'UTF-8'),
+                array_keys($trans_map),
+                array_values($trans_map),
                 $m[0]
             );
 
