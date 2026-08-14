@@ -102,7 +102,7 @@ if ($resource === 'mountains') {
 
         $source_id = $_GET['source'] ?? 0;
         if ($source_id == 0) {
-            $sql = <<<EOS
+            $stmt = $pdo->prepare("
                 SELECT id, main_name AS name, lat, lon, z_min
                 FROM mountain_pois
                 WHERE is_used
@@ -110,8 +110,7 @@ if ($resource === 'mountains') {
                     AND y_z18 BETWEEN ? AND ?
                     AND z_min <= ?
                     AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
-            EOS;
-            $stmt = $pdo->prepare($sql);
+            ");
             $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
         } else {
             $stmt = $pdo->prepare("SELECT source_table FROM information_sources WHERE id = ?");
@@ -123,7 +122,7 @@ if ($resource === 'mountains') {
                 exit;
             }
             $source_table = $row['source_table'];
-            $sql = <<<EOS
+            $stmt = $pdo->prepare("
                 SELECT
                     COALESCE(p.mountain_id, 0) AS id,
                     s.names_json->>'$[0].name' AS name,
@@ -135,8 +134,7 @@ if ($resource === 'mountains') {
                 WHERE s.x_z18 BETWEEN ? AND ?
                     AND s.y_z18 BETWEEN ? AND ?
                     AND s.z_min <= ?
-            EOS;
-            $stmt = $pdo->prepare($sql);
+            ");
             $stmt->execute([$source_id, $min_x, $max_x, $min_y, $max_y, $zoom]);
         }
 
@@ -196,13 +194,12 @@ if ($resource === 'mountains') {
                 $m[0] = str_replace('%', '', $m[0]);
                 $m[0] = ($starts ? '%' : '') . $m[0] . ($ends ? '%' : '');
             }
-            $sql = <<<EOS
+            $stmt = $pdo->prepare("
                 SELECT src_char, dst_char
                 FROM char_trans_map
                 WHERE hit_count > 0
                 ORDER BY hit_count DESC
-            EOS;
-            $stmt = $pdo->prepare($sql);
+            ");
             $stmt->execute();
             $trans_map = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
             $m[0] = str_replace(
@@ -284,7 +281,7 @@ if ($resource === 'mountains') {
         $stmt = $pdo->prepare("SET @center = ST_GeomFromText(?, 4326, 'axis-order=long-lat')");
         $stmt->execute(["POINT($lon $lat)"]);
 
-        $sql = <<<EOS
+        $stmt = $pdo->prepare("
             SELECT m.id, m.main_name AS name, m.main_kana AS kana,
                 m.lat, m.lon, ROUND(m.elevation) AS elev,
                 ST_Distance_Sphere(m.geom, @center) AS distance
@@ -294,19 +291,17 @@ if ($resource === 'mountains') {
                 AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE child_id = m.id)
             ORDER BY distance
             LIMIT ?
-        EOS;
-        $stmt = $pdo->prepare($sql);
+        ");
         $stmt->execute([$max_dist, $limit]);
         $results = $stmt->fetchAll();
 
         foreach ($results as $i => $result) {
-            $sql = <<<EOS
+            $stmt = $pdo->prepare("
                 SELECT DISTINCT a.pref_code AS code, a.pref_name AS name, a.pref_qid AS qid
                 FROM poi_address_map AS p
                 JOIN administrative_regions AS a ON p.jis_code = a.jis_code
                 WHERE p.mountain_id = ?
-            EOS;
-            $stmt = $pdo->prepare($sql);
+            ");
             $stmt->execute([$result['id']]);
             $results[$i]['prefectures'] = $stmt->fetchAll();
         }
@@ -324,14 +319,13 @@ if ($resource === 'mountains') {
     // ----------------------------------------------------
     } elseif ($segments[3] === 'records') {
         $mountain_id = (int)$action;
-        $sql = <<<EOS
+        $stmt = $pdo->prepare("
             SELECT r.id, r.start_date, r.end_date, r.published_at, r.title, r.summary, r.public_url, r.image_url
             FROM mountain_records AS r
             JOIN visited_mountains AS v ON r.id = v.mountain_record_id
             WHERE v.mountain_id = ?
             ORDER BY r.start_date DESC
-        EOS;
-        $stmt = $pdo->prepare($sql);
+        ");
         $stmt->execute([$mountain_id]);
         $results = $stmt->fetchAll();
 
@@ -346,7 +340,7 @@ if ($resource === 'mountains') {
         $mountain_id = (int)$action;
 
         // 【修正】一対多の重複を防ぐため、ベースの山岳情報だけをシンプルに取得
-        $sql = <<<EOS
+        $stmt = $pdo->prepare("
             SELECT
                 m.id,
                 m.main_name AS name,
@@ -363,8 +357,7 @@ if ($resource === 'mountains') {
                 ) AS gcp_name
             FROM mountain_pois AS m
             WHERE m.id = ?
-            EOS;
-        $stmt = $pdo->prepare($sql);
+        ");
         $stmt->execute([$mountain_id]);
         $results = $stmt->fetch();
         if (!$results) {
@@ -374,7 +367,7 @@ if ($resource === 'mountains') {
         }
 
         // 別途、情報源（ソースのオーソリティ）の display_name を取得してマージ
-        $sql = <<<EOS
+        $stmt = $pdo->prepare("
             SELECT 
                 GROUP_CONCAT(
                     s.display_name 
@@ -397,25 +390,23 @@ if ($resource === 'mountains') {
                 p.mountain_id,
                 p.poi_name,
                 p.poi_kana;
-        EOS;
-        $stmt = $pdo->prepare($sql);
+        ");
         $stmt->execute([$mountain_id]);
         $auth_row = $stmt->fetch();
         $results['auth_list'] = $auth_row['auth_list'] ?? 'Unknown';
 
         # 親要素があればその名称を取得
-        $sql = <<<EOS
+        $stmt = $pdo->prepare("
             SELECT m.main_name AS name, m.main_kana AS kana
             FROM mountain_pois AS m
             JOIN poi_hierarchies AS h ON m.id = h.parent_id
             WHERE h.child_id = ?
-        EOS;
-        $stmt = $pdo->prepare($sql);
+        ");
         $stmt->execute([$mountain_id]);
         $results['parent'] = $stmt->fetchAll();
 
         # 別名を取得
-        $sql = <<<EOS
+        $stmt = $pdo->prepare("
             SELECT 
                 p.poi_name AS name,
                 p.poi_kana AS kana,
@@ -431,20 +422,18 @@ if ($resource === 'mountains') {
                 AND NOT (p.poi_name = m.main_name AND p.poi_kana = m.main_kana)
                 AND m.id = ?
             GROUP BY p.poi_name, p.poi_kana;
-            EOS;
-        $stmt = $pdo->prepare($sql);
+        ");
         $stmt->execute([$mountain_id]);
         $results['aliases'] = $stmt->fetchAll();
 
         # 所在地を取得
-        $sql = <<<EOS
+        $stmt = $pdo->prepare("
             SELECT jis_code, full_name
             FROM poi_address_map
             JOIN administrative_regions USING (jis_code)
             WHERE mountain_id = ?
             ORDER BY jis_code
-        EOS;
-        $stmt = $pdo->prepare($sql);
+        ");
         $stmt->execute([$mountain_id]);
         $results['address'] = $stmt->fetchAll();
 
@@ -469,14 +458,13 @@ if ($resource === 'mountains') {
     $stmt = $pdo->prepare("SET @point = ST_GeomFromText(?, 4326, 'axis-order=long-lat')");
     $stmt->execute(["POINT($lon $lat)"]);
 
-    $sql = <<<EOS
+    $stmt = $pdo->query("
         SELECT DISTINCT ar.jis_code, ar.full_name
         FROM administrative_regions AS ar
         LEFT JOIN administrative_boundaries AS ab ON ar.jis_code = ab.jis_code
         WHERE ST_Contains(ab.geom, @point)
         ORDER BY ar.jis_code
-    EOS;
-    $stmt = $pdo->query($sql);
+    ");
     $results = $stmt->fetchAll();
 
     header("Content-Type: application/json; charset=utf-8");
@@ -489,12 +477,11 @@ if ($resource === 'mountains') {
 } elseif ($resource === 'records' && is_numeric($action)) {
     $id = (int)$action;
 
-    $sql = <<<EOS
+    $stmt = $pdo->prepare("
         SELECT id, start_date, end_date, published_at, title, summary, public_url
         FROM mountain_records
         WHERE id = ?
-    EOS;
-    $stmt = $pdo->prepare($sql);
+    ");
     $stmt->execute([$id]);
     $results = $stmt->fetchAll();
 
