@@ -22,7 +22,7 @@ import Searchbar from './searchbar.js';
 import {fromStringYX} from './transangle.js';
 
 // const api_base = 'https://map.jpn.org';
-const api_base = '/~tad/test';
+const api_base = import.meta.env.VITE_API_BASE;
 
 const param = { lon: 138.9853, lat: 36.5039, zoom: 10 };
 
@@ -269,6 +269,15 @@ async function getMountainDetail(id) {
           throw new Error(`HTTPエラー: ${response.status}`);
       }
       const data = await response.json();
+      // 型を明示的に変換
+      data.name = String(data.name);
+      data.kana = String(data.kana);
+      data.parent = !Array.isArray(data.parent) ? [] : data.parent.map(
+        x => ({ name: String(x.name), kana: String(x.kana) })
+      );
+      data.aliases = !Array.isArray(data.aliases) ? [] : data.aliases.map(
+        x => ({ name: String(x.name), kana: String(x.kana), auth_list: String(x.auth_list) })
+      );
       displayMountainInfo(data);
   } catch (error) {
       console.error('データの取得に失敗しました:', error);
@@ -292,6 +301,7 @@ function displayMountainInfo(data) {
     { label: '緯度', value: todms(data.lat) },
     { label: '経度', value: todms(data.lon) },
     { label: '所在', value: data.address.map(x => x.full_name).join('\n') },
+    { label: '参照', value: data.external_sources.filter(x => x.url) },
     { label: 'ID', value: data.id }
   ];
   fields.forEach(function (field) {
@@ -302,6 +312,9 @@ function displayMountainInfo(data) {
       return;
     }
     if (field.label === '点名' && !field.value) {
+      return;
+    }
+    if (field.label === '参照' && field.value.length == 0) {
       return;
     }
     const tr = document.createElement('tr');
@@ -334,6 +347,16 @@ function displayMountainInfo(data) {
       span.title = field.value;
       span.textContent = field.value.split(',')[0];
       c2.appendChild(span);
+    } else if (field.label === '参照') {
+      field.value.forEach(function (item, index) {
+        if (index > 0) {
+          c2.appendChild(document.createElement('br'));
+        }
+        const a = document.createElement('a');
+        a.href = item.url;
+        a.textContent = item.display_name;
+        c2.appendChild(a);
+      });
     } else {
       c2.textContent = field.value;
     }

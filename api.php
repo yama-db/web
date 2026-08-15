@@ -13,6 +13,7 @@ if (file_exists($env_path)) {
         }
     }
 }
+
 $host = $_SERVER['DB_HOST'] ?? 'localhost';
 $port = $_SERVER['DB_PORT'] ?? 3306;
 $user = $_SERVER['DB_USER'] ?? null;
@@ -22,7 +23,7 @@ $dsn = "mysql:host={$host};dbname={$dbname};port={$port};charset=utf8mb4";
 if (!$user || !$pass || !$dbname) {
     http_response_code(500);
     echo json_encode([
-        "error" => "Database configuration is missing. Please check the .env.php file."
+        "error" => "Database configuration is missing."
     ]);
     exit;
 }
@@ -50,11 +51,11 @@ function get_lat_lon()
     $args = [
         'lat' => [
             'filter' => FILTER_VALIDATE_FLOAT,
-            'options' => ['min_range' => -90, 'max_range' => 90]
+            'options' => ['min_range' => -90.0, 'max_range' => 90.0]
         ],
         'lon' => [
             'filter' => FILTER_VALIDATE_FLOAT,
-            'options' => ['min_range' => -180, 'max_range' => 180]
+            'options' => ['min_range' => -180.0, 'max_range' => 180.0]
         ]
     ];
     return filter_input_array(INPUT_GET, $args);
@@ -317,7 +318,7 @@ if ($resource === 'mountains') {
     // ----------------------------------------------------
     // 登頂した山行記録: /api/mountains/{id}/records
     // ----------------------------------------------------
-    } elseif ($segments[3] === 'records') {
+    } elseif (($segments[3] ?? '') === 'records') {
         $mountain_id = (int)$action;
         $stmt = $pdo->prepare("
             SELECT r.id, r.start_date, r.end_date, r.published_at, r.title, r.summary, r.public_url, r.image_url
@@ -339,7 +340,7 @@ if ($resource === 'mountains') {
     } else {
         $mountain_id = (int)$action;
 
-        // 【修正】一対多の重複を防ぐため、ベースの山岳情報だけをシンプルに取得
+        // ベースの山岳情報を取得
         $stmt = $pdo->prepare("
             SELECT
                 m.id,
@@ -351,12 +352,13 @@ if ($resource === 'mountains') {
                 (
                     SELECT s.names_json->>'$[0].name'
                     FROM stg_gsi_gcp_pois AS s
-                    JOIN poi_links AS p ON s.source_uuid = p.source_uuid
+                    JOIN poi_links AS p ON s.source_uuid = p.source_uuid AND p.source_id = 1
                     WHERE p.mountain_id = m.id
                     LIMIT 1
                 ) AS gcp_name
             FROM mountain_pois AS m
             WHERE m.id = ?
+            LIMIT 1
         ");
         $stmt->execute([$mountain_id]);
         $results = $stmt->fetch();
@@ -366,36 +368,63 @@ if ($resource === 'mountains') {
             exit;
         }
 
-        // 別途、情報源（ソースのオーソリティ）の display_name を取得してマージ
+        // 外部情報源のurlを取得
+        $stmt = $pdo->query("
+            SELECT source_table, display_name, url
+            FROM information_sources
+            WHERE source_table IN ('stg_wikidata_pois', 'stg_yamap_pois', 'stg_yamareco_pois')
+            ORDER BY id
+        ");
+        $rows = $stmt->fetchAll();
+        $external_sources = [];
+        foreach ($rows as $row) {
+            $stmt = $pdo->prepare("
+                SELECT raw_id FROM `{$row['source_table']}` WHERE mountain_id = ? LIMIT 1
+            ");
+            $stmt->execute([$mountain_id]);
+            $raw_id = $stmt->fetchColumn();
+            $external_sources[] = [
+                'display_name' => $row['display_name'],
+                'url' => $raw_id ? str_replace('{raw_id}', $raw_id, $row['url']) : null
+            ];
+        }
+        $results['external_sources'] = $external_sources;
+
+        // 山名グループ化と source_id リストの取得
         $stmt = $pdo->prepare("
-            SELECT 
-                GROUP_CONCAT(
-                    s.display_name 
-                    ORDER BY s.reliability_level ASC, s.id ASC 
-                    SEPARATOR ','
-                ) AS auth_list
-            FROM poi_names AS p
-            JOIN (
-                SELECT mountain_id, poi_name, poi_kana
-                FROM poi_names
-                WHERE is_preferred = 1
-                AND mountain_id = ?
-            ) AS pref
-            ON p.mountain_id = pref.mountain_id
-            AND p.poi_name = pref.poi_name
-            AND p.poi_kana = pref.poi_kana
-            JOIN information_sources AS s 
-            ON p.source_id = s.id
-            GROUP BY 
-                p.mountain_id,
+            SELECT
                 p.poi_name,
-                p.poi_kana;
+                p.poi_kana,
+                MAX(p.is_preferred) AS is_preferred,
+                GROUP_CONCAT(
+                    isrc.display_name 
+                    ORDER BY isrc.reliability_level ASC, isrc.id ASC 
+                    SEPARATOR ','
+                ) AS auth_list,
+                MIN(isrc.reliability_level) AS min_reliability
+            FROM poi_names AS p
+            JOIN information_sources AS isrc ON p.source_id = isrc.id AND p.mountain_id = ?
+            GROUP BY p.poi_name, p.poi_kana
+            ORDER BY is_preferred DESC, min_reliability ASC, p.poi_name ASC
         ");
         $stmt->execute([$mountain_id]);
-        $auth_row = $stmt->fetch();
-        $results['auth_list'] = $auth_row['auth_list'] ?? 'Unknown';
+        $rows = $stmt->fetchAll();
+        $aliases = [];
+        $results['auth_list'] = "";
+        foreach ($rows as $row) {
+            if ($row['is_preferred']) {
+                $results['auth_list'] = $row['auth_list'];
+                continue;
+            }
+            $aliases[] = [
+                'name' => $row['poi_name'],
+                'kana' => $row['poi_kana'],
+                'auth_list' => $row['auth_list']
+            ];
+        }
+        $results['aliases'] = $aliases;
 
-        # 親要素があればその名称を取得
+        // 親要素があればその名称を取得
         $stmt = $pdo->prepare("
             SELECT m.main_name AS name, m.main_kana AS kana
             FROM mountain_pois AS m
@@ -404,27 +433,6 @@ if ($resource === 'mountains') {
         ");
         $stmt->execute([$mountain_id]);
         $results['parent'] = $stmt->fetchAll();
-
-        # 別名を取得
-        $stmt = $pdo->prepare("
-            SELECT 
-                p.poi_name AS name,
-                p.poi_kana AS kana,
-                GROUP_CONCAT(
-                    s.display_name
-                    ORDER BY s.reliability_level ASC,
-                    s.id ASC SEPARATOR ','
-                ) AS auth_list
-            FROM mountain_pois AS m
-            JOIN poi_names AS p ON m.id = p.mountain_id
-            JOIN information_sources AS s ON p.source_id = s.id
-            WHERE p.poi_kana IS NOT NULL AND p.poi_kana <> ''
-                AND NOT (p.poi_name = m.main_name AND p.poi_kana = m.main_kana)
-                AND m.id = ?
-            GROUP BY p.poi_name, p.poi_kana;
-        ");
-        $stmt->execute([$mountain_id]);
-        $results['aliases'] = $stmt->fetchAll();
 
         # 所在地を取得
         $stmt = $pdo->prepare("
@@ -439,7 +447,7 @@ if ($resource === 'mountains') {
 
         header("Content-Type: application/json; charset=utf-8");
         header('Cache-Control: no-store, max-age=0');
-        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK | JSON_UNESCAPED_SLASHES);
     }
 
 // ----------------------------------------------------

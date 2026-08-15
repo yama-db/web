@@ -6,8 +6,7 @@ import category from './category.json';
 
 console.log(category);
 
-// const share = import.meta.env.VITE_SHARE;
-const api_base = '/~tad/test';
+const api_base = import.meta.env.VITE_API_BASE;
 const passive = { passive: true };
 
 export default class Toolbar extends Control {

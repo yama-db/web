@@ -74,3 +74,7 @@ form[name="form2"] > :last-child {
   text-align: right;
   white-space: nowrap;
 }
+
+span[title] {
+  color: purple;
+}
