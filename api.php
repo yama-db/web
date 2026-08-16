@@ -383,10 +383,12 @@ if ($resource === 'mountains') {
             ");
             $stmt->execute([$mountain_id]);
             $raw_id = $stmt->fetchColumn();
-            $external_sources[] = [
-                'display_name' => $row['display_name'],
-                'url' => $raw_id ? str_replace('{raw_id}', $raw_id, $row['url']) : null
-            ];
+            if ($raw_id) {
+                $external_sources[] = [
+                    'display_name' => $row['display_name'],
+                    'url' => str_replace('{raw_id}', $raw_id, $row['url'])
+                ];
+            }
         }
         $results['external_sources'] = $external_sources;
 
