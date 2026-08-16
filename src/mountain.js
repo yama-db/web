@@ -1,4 +1,7 @@
 // omap.js
+import {install} from 'ga-gtag';
+install(import.meta.env.VITE_GTAG2);
+
 import View from 'ol/View';
 import {fromLonLat, toLonLat} from 'ol/proj';
 import TileLayer from 'ol/layer/Tile';
@@ -20,6 +23,9 @@ import CenterCross from './centercross.js';
 import Toolbar from './toolbar.js';
 import Searchbar from './searchbar.js';
 import {fromStringYX} from './transangle.js';
+
+import tippy from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
 
 // const api_base = 'https://map.jpn.org';
 const api_base = import.meta.env.VITE_API_BASE;
@@ -84,19 +90,19 @@ const stroke = new Stroke({ color: 'white', width: 2 });
 const img_w = new Icon({ src: 'https://map.jpn.org/icon/902029.png', declutterMode: 'none' });
 const img_r = new Icon({ src: 'https://map.jpn.org/icon/902030.png', declutterMode: 'none' });
 const img_y = new Icon({ src: 'https://map.jpn.org/icon/902031.png', declutterMode: 'none' });
-// z_min          8,     9,    10,    11,    12,    13
-const img = [ img_r, img_r, img_r, img_r, img_y, img_w ];
+// z_min          7,     8,     9,    10,    11,    12,    13
+const img = [ img_r, img_r, img_r, img_r, img_r, img_y, img_w ];
 
 function styleFunction(feature) {
   let style;
   const type = feature.getGeometry().getType();
   const z_min = feature.get('z_min');
-  if (current_zoom < z_min) {
+  if (current_zoom < z_min || z_min < 7 || z_min > 13) {
     return null;
   }
   if (type === 'Point') {
     style = {
-      image: img[z_min - 8],
+      image: img[z_min - 7],
       text: new Text({
         text: feature.get('name'),
         font: '14px sans-serif',
@@ -301,7 +307,7 @@ function displayMountainInfo(data) {
     { label: '緯度', value: todms(data.lat) },
     { label: '経度', value: todms(data.lon) },
     { label: '所在', value: data.address.map(x => x.full_name).join('\n') },
-    { label: '参照', value: data.external_sources.filter(x => x.url) },
+    { label: '参照', value: data.external_sources },
     { label: 'ID', value: data.id }
   ];
   fields.forEach(function (field) {
@@ -337,15 +343,23 @@ function displayMountainInfo(data) {
         displaySanmei(c2, item.name, item.kana);
         c2.appendChild(document.createTextNode('（'));
         const span = document.createElement('span');
-        span.title = item.auth_list;
         span.textContent = item.auth_list.split(',')[0];
+        span.classList.add('tooltip-target');
+        tippy(span, {
+          content: item.auth_list,
+          touch: true
+        });
         c2.appendChild(span);
         c2.appendChild(document.createTextNode('）'));
       });
     } else if (field.label === '出典') {
       const span = document.createElement('span');
-      span.title = field.value;
       span.textContent = field.value.split(',')[0];
+      span.classList.add('tooltip-target');
+      tippy(span, {
+        content: field.value,
+        touch: true
+      });
       c2.appendChild(span);
     } else if (field.label === '参照') {
       field.value.forEach(function (item, index) {

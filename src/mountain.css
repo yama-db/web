@@ -75,6 +75,14 @@ form[name="form2"] > :last-child {
   white-space: nowrap;
 }
 
-span[title] {
+.tooltip-target {
   color: purple;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+#mountain-info a:after {
+    margin-left: 1px;
+    margin-right: 1px;
+    content: url(data:image/gif;base64,R0lGODlhCgAKAPAAAEuxRgAAACH5BAEAAAEALAAAAAAKAAoAAAIXTICJBuaX4JputnYyxfc+1inRx4lLUAAAOw==);
 }
