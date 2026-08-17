@@ -228,7 +228,7 @@ if ($resource === 'mountains') {
                     WITH matched_names AS (
                         SELECT DISTINCT pn.mountain_id
                         FROM poi_names AS pn
-                        WHERE pn.poi_name_normalized = ?
+                        WHERE pn.poi_name_normalized LIKE ?
                             AND pn.poi_kana IS NOT NULL
                             AND pn.poi_kana <> ''
                             $condition
