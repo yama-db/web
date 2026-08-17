@@ -54,14 +54,42 @@ function get_lat_lon()
     $args = [
         'lat' => [
             'filter' => FILTER_VALIDATE_FLOAT,
-            'options' => ['min_range' => -90.0, 'max_range' => 90.0]
+            'options' => ['min_range' => -90, 'max_range' => 90]
         ],
         'lon' => [
             'filter' => FILTER_VALIDATE_FLOAT,
-            'options' => ['min_range' => -180.0, 'max_range' => 180.0]
+            'options' => ['min_range' => -180, 'max_range' => 180]
         ]
     ];
     return filter_input_array(INPUT_GET, $args);
+}
+
+function output_geojson(PDOStatement $rows): void
+{
+    header("Content-Type: application/geo+json; charset=utf-8");
+    $max_age = 604800; # 7 days
+    header("Cache-Control: public, max-age={$max_age}, stale-while-revalidate=86400");
+
+    echo '{"type": "FeatureCollection", "features": [';
+    $first = true;
+    while ($row = $rows->fetch()) {
+        if (!$first) echo ',';
+        $feature = [
+            "id" => (int)$row['id'],
+            "type" => "Feature",
+            "geometry" => [
+                "type" => "Point",
+                "coordinates" => [(float)$row['lon'], (float)$row['lat']]
+            ],
+            "properties" => [
+                "name" => $row['name'],
+                "z_min" => (int)($row['z_min'] ?? 13)
+            ]
+        ];
+        echo json_encode($feature, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
+        $first = false;
+    }
+    echo ']}';
 }
 
 $request_uri = $_SERVER['REQUEST_URI'];
@@ -106,105 +134,23 @@ if ($resource === 'mountains') {
         $max_y = (($y + 1) << $diff_z) - 1;
         $zoom = $z + 1; // ラスタタイルのズームレベルを計算
 
-        $source_id = $_GET['source'] ?? 0;
-        if ($source_id == 0) {
-            $stmt = $pdo->prepare("
-                SELECT id, main_name AS name, lat, lon, z_min
-                FROM mountain_pois
-                WHERE is_used
-                    AND x_z18 BETWEEN ? AND ?
-                    AND y_z18 BETWEEN ? AND ?
-                    AND z_min <= ?
-                    AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
-            ");
-            $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
-        } else {
-            $stmt = $pdo->prepare("SELECT source_table FROM information_sources WHERE id = ?");
-            $stmt->execute([$source_id]);
-            $row = $stmt->fetch();
-            if (!$row) {
-                http_response_code(400); // Bad Request
-                header('Content-Type: application/json; charset=utf-8');
-                echo json_encode(['error' => 'Invalid source ID']);
-                exit;
-            }
-            $source_table = $row['source_table'];
-            $stmt = $pdo->prepare("
-                SELECT
-                    COALESCE(p.mountain_id, 0) AS id,
-                    s.names_json->>'$[0].name' AS name,
-                    s.lat,
-                    s.lon,
-                    s.z_min
-                FROM {$source_table} AS s
-                LEFT JOIN poi_links AS p ON s.source_uuid = p.source_uuid AND p.source_id = ?
-                WHERE s.x_z18 BETWEEN ? AND ?
-                    AND s.y_z18 BETWEEN ? AND ?
-                    AND s.z_min <= ?
-            ");
-            $stmt->execute([$source_id, $min_x, $max_x, $min_y, $max_y, $zoom]);
-        }
-
-        header("Content-Type: application/geo+json; charset=utf-8");
-        $max_age = 604800; # 7 days
-        header("Cache-Control: public, max-age={$max_age}, stale-while-revalidate=86400");
-
-        echo '{"type": "FeatureCollection", "features": [';
-        $first = true;
-        while ($row = $stmt->fetch()) {
-            if (!$first) echo ',';
-            $feature = [
-                "id" => (int)$row['id'],
-                "type" => "Feature",
-                "geometry" => [
-                    "type" => "Point",
-                    "coordinates" => [(float)$row['lon'], (float)$row['lat']]
-                ],
-                "properties" => [
-                    "name" => $row['name'],
-                    "z_min" => (int)($row['z_min'] ?? 13)
-                ]
-            ];
-            echo json_encode($feature, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
-            $first = false;
-        }
-        echo ']}';
-
-    // ----------------------------------------------------
-    // 情報源一覧: /api/mountains/sources
-    // ----------------------------------------------------
-    } elseif ($action === 'sources') {
-        $stmt = $pdo->query("
-            SELECT id, display_name
-            FROM information_sources
-            WHERE info_type IN ('BOOK', 'WEBPAGE')
-            ORDER BY id
+        $stmt = $pdo->prepare("
+            SELECT id, main_name AS name, lat, lon, z_min
+            FROM mountain_pois
+            WHERE is_used
+                AND x_z18 BETWEEN ? AND ?
+                AND y_z18 BETWEEN ? AND ?
+                AND z_min <= ?
+                AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
         ");
-        $results = $stmt->fetchAll();
-        header("Content-Type: application/json; charset=utf-8");
-        header('Cache-Control: no-store, max-age=0');
-        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
+        $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
+        output_geojson($stmt);
 
     // ----------------------------------------------------
     // 情報源毎 geojson: /api/mountains/geojson?source={source_id}
     // ----------------------------------------------------
     } elseif ($action === 'geojson') {
-        $source_id = $_GET['source'] ?? 0;
-        $stmt = $pdo->prepare("
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_sources
-                WHERE id = ? AND info_type IN ('BOOK', 'WEBPAGE')
-            ) AS is_exist;
-        ");
-        $stmt->execute([$source_id]);
-        $is_exist = $stmt->fetchColumn();
-        if (!$is_exist) {
-            http_response_code(400); // Bad Request
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['error' => 'Invalid source ID']);
-            exit;
-        }
+        $source_id = filter_input(INPUT_GET, 'source', FILTER_VALIDATE_INT) ?: 0;
         $stmt = $pdo->prepare("
             SELECT
                 m.id,
@@ -214,39 +160,19 @@ if ($resource === 'mountains') {
                 m.z_min
             FROM mountain_pois AS m
             JOIN poi_names AS p ON m.id = p.mountain_id AND p.source_id = ? AND p.name_type = 'MAIN'
+            JOIN information_sources AS s ON p.source_id = s.id AND s.info_type != 'DATASET'
         ");
         $stmt->execute([$source_id]);
-
-        header("Content-Type: application/geo+json; charset=utf-8");
-        $max_age = 604800; # 7 days
-        header("Cache-Control: public, max-age={$max_age}, stale-while-revalidate=86400");
-
-        echo '{"type": "FeatureCollection", "features": [';
-        $first = true;
-        while ($row = $stmt->fetch()) {
-            if (!$first) echo ',';
-            $feature = [
-                "id" => (int)$row['id'],
-                "type" => "Feature",
-                "geometry" => [
-                    "type" => "Point",
-                    "coordinates" => [(float)$row['lon'], (float)$row['lat']]
-                ],
-                "properties" => [
-                    "name" => $row['name'],
-                    "z_min" => (int)($row['z_min'] ?? 13)
-                ]
-            ];
-            echo json_encode($feature, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
-            $first = false;
-        }
-        echo ']}';
+        output_geojson($stmt);
 
     // ----------------------------------------------------
-    // 山名検索: /api/mountains/search?q=xxx
+    // 山名検索: /api/mountains/search?q=xxx&source={source_id}
     // ----------------------------------------------------
     } elseif ($action === 'search') {
-        $search_term = $_GET['q'] ?? '';
+        $source_id = filter_input(INPUT_GET, 'source', FILTER_VALIDATE_INT) ?: 0;
+        $search_term = filter_input(INPUT_GET, 'q') ?: '';
+        $search_term = trim($search_term);
+        $search_term = addcslashes($search_term, '\\');
         if (preg_match('/^[0-9]+$/', $search_term)) {
             // 数値（ID）検索のロジック
             $sql = <<<EOS
@@ -265,14 +191,6 @@ if ($resource === 'mountains') {
         } else {
             // 文字列曖昧・地域指定検索のロジック
             $m = explode('@', $search_term, 2);
-            $op = '=';
-            if (str_contains($m[0], '%')) {
-                $starts = str_starts_with($m[0], '%');
-                $ends = str_ends_with($m[0], '%');
-                if ($starts || $ends) $op = 'LIKE';
-                $m[0] = str_replace('%', '', $m[0]);
-                $m[0] = ($starts ? '%' : '') . $m[0] . ($ends ? '%' : '');
-            }
             $stmt = $pdo->prepare("
                 SELECT src_char, dst_char
                 FROM char_trans_map
@@ -287,6 +205,7 @@ if ($resource === 'mountains') {
                 $m[0]
             );
 
+            $condition = $source_id > 0 ? "AND pn.source_id = ?" : "";
             $bind_params = [];
             if (count($m) == 2) {
                 $m[1] = str_replace('%', '', $m[1]);
@@ -296,10 +215,11 @@ if ($resource === 'mountains') {
                         FROM poi_names AS pn
                         JOIN poi_address_map AS pm ON pn.mountain_id = pm.mountain_id
                         JOIN administrative_regions AS ar ON pm.jis_code = ar.jis_code
-                        WHERE pn.poi_name_normalized $op ?
+                        WHERE pn.poi_name_normalized LIKE ?
                             AND pn.poi_kana IS NOT NULL
                             AND pn.poi_kana <> ''
                             AND ar.full_name LIKE CONCAT(?, '%')
+                            $condition
                     )
                 EOS;
                 $bind_params = [$m[0], $m[1]];
@@ -308,12 +228,16 @@ if ($resource === 'mountains') {
                     WITH matched_names AS (
                         SELECT DISTINCT pn.mountain_id
                         FROM poi_names AS pn
-                        WHERE pn.poi_name_normalized $op ?
+                        WHERE pn.poi_name_normalized = ?
                             AND pn.poi_kana IS NOT NULL
                             AND pn.poi_kana <> ''
+                            $condition
                     )
                 EOS;
                 $bind_params = [$m[0]];
+            }
+            if ($source_id > 0) {
+                $bind_params[] = $source_id;
             }
 
             $sql .= <<<EOS
@@ -349,7 +273,7 @@ if ($resource === 'mountains') {
         $coordinates = get_lat_lon();
         $lat = $coordinates['lat'];
         $lon = $coordinates['lon'];
-        if (!($lat && $lon)) {
+        if (!$lat || !$lon) {
             http_response_code(400); // Bad Request
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['error' => 'Invalid latitude or longitude']);
@@ -456,20 +380,24 @@ if ($resource === 'mountains') {
             WHERE source_table IN ('stg_wikidata_pois', 'stg_yamap_pois', 'stg_yamareco_pois')
             ORDER BY id
         ");
+        $isrc = $stmt->fetchAll();
+        $stmt = $pdo->prepare("
+            SELECT MAX(raw_id) AS raw_id FROM stg_wikidata_pois WHERE mountain_id = ?
+            UNION
+            SELECT MAX(raw_id) AS raw_id FROM stg_yamap_pois WHERE mountain_id = ?
+            UNION
+            SELECT MAX(raw_id) AS raw_id FROM stg_yamareco_pois WHERE mountain_id = ?
+        ");
+        $stmt->execute([$mountain_id, $mountain_id, $mountain_id]);
         $rows = $stmt->fetchAll();
         $external_sources = [];
-        foreach ($rows as $row) {
-            $stmt = $pdo->prepare("
-                SELECT raw_id FROM `{$row['source_table']}` WHERE mountain_id = ? LIMIT 1
-            ");
-            $stmt->execute([$mountain_id]);
-            $raw_id = $stmt->fetchColumn();
-            if ($raw_id) {
-                $external_sources[] = [
-                    'display_name' => $row['display_name'],
-                    'url' => str_replace('{raw_id}', $raw_id, $row['url'])
-                ];
-            }
+        for ($i = 0; $i < count($rows); $i++) {
+            $raw_id = $rows[$i]['raw_id'];
+            if ($raw_id === null) continue;
+            $external_sources[] = [
+                'display_name' => $isrc[$i]['display_name'],
+                'url' => str_replace('{raw_id}', $raw_id, $isrc[$i]['url'])
+            ];
         }
         $results['external_sources'] = $external_sources;
 
@@ -540,7 +468,7 @@ if ($resource === 'mountains') {
     $coordinates = get_lat_lon();
     $lat = $coordinates['lat'];
     $lon = $coordinates['lon'];
-    if (!($lat && $lon)) {
+    if (!$lat || !$lon) {
         http_response_code(400); // Bad Request
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['error' => 'Invalid latitude or longitude']);

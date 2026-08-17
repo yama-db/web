@@ -90,6 +90,7 @@ const seamlessphoto = new TileLayer({
 });
 
 let current_zoom = view.getZoom();
+let current_source_id = 0;
 
 const fill = new Fill({ color: 'blue' });
 const stroke = new Stroke({ color: 'white', width: 2 });
@@ -130,7 +131,7 @@ sanmei[0] = new VectorTileLayer({
     url: api_base + '/api/mountains/xyz/{z}/{x}/{y}.geojson',
     format: new GeoJSON()
   }),
-  title: '全国',
+  title: category[0].display_name,
   style: styleFunction,
   declutter: true
 });
@@ -166,9 +167,8 @@ toolbar.setCreditButton('tb_help', 'help.html');
 toolbar.setLayerCheckbox('tb_sanmei', sanmei);
 toolbar.setControlCheckbox('tb_cross', centercross);
 
-category.unshift({ id: 0, display_name: '全国' });
 category.forEach((item, index) => {
-  if (index == 0) { return; } // 全国はすでに sanmei[0] にある
+  if (index == 0) { return; } // sanmei[0] は作成済
   sanmei[index] = new VectorLayer({
     source: new VectorSource({
       url: api_base + '/api/mountains/geojson?source=' + item.id,
@@ -199,6 +199,7 @@ function fitToLayer(layer) {
 }
 
 toolbar.setSourceSelect('tb_source', category, (_value, index) => {
+  current_source_id = category[index].id;
   sanmei.forEach((layer, i) => {
     layer.setVisible(i == index);
   });
@@ -271,7 +272,10 @@ function displayResults(data) {
 
 async function query(s) {
   try {
-    const response = await fetch(api_base + '/api/mountains/search?q=' + encodeURIComponent(s));
+    const response = await fetch(
+      api_base + '/api/mountains/search?q=' + encodeURIComponent(s)
+          + '&source=' + current_source_id
+      );
     if (!response.ok) {
       throw new Error(`HTTPエラー: ${response.status}`);
     }
