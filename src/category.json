@@ -1,5 +1,9 @@
 [
   {
+    "id": 0,
+    "display_name": "全国"
+  },
+  {
     "id": 10,
     "display_name": "静岡の百山"
   },
