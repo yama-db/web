@@ -2,9 +2,6 @@
 import Control from 'ol/control/Control';
 import {toLonLat} from 'ol/proj';
 import {formatDEG} from './transangle.js';
-import category from './category.json';
-
-console.log(category);
 
 const api_base = import.meta.env.VITE_API_BASE;
 const passive = { passive: true };
@@ -179,11 +176,16 @@ export default class Toolbar extends Control {
     }, passive);
   }
 
-  setSourceSelect(target_id) {
+  setSourceSelect(target_id, category, handler) {
     const element = document.getElementById(target_id);
-    category.forEach(({ id, display_name }) => {
-      element.appendChild(new Option(display_name, id));
+    category.forEach((item, _index) => {
+      element.appendChild(new Option(item.display_name, item.id));
     });
+    element.addEventListener('change', _event => {
+      const index = element.selectedIndex;
+      const value = element.options[index].value;
+      handler(value, index);
+    }, passive);
   }
 
   setCreditButton(id, url) {

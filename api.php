@@ -1,6 +1,11 @@
 <?php
-if ($_SERVER['HTTP_SEC_FETCH_MODE'] != 'cors') {
-    http_response_code(403); # Forbidden
+$app_env = $_SERVER['APP_ENV'] ?? getenv('APP_ENV') ?: 'production';
+if ($app_env === 'development') {
+    header("Access-Control-Allow-Origin: *");
+} elseif (($_SERVER['HTTP_SEC_FETCH_SITE'] ?? null) !== 'same-origin') {
+    http_response_code(403); // Forbidden
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'Forbidden']);
     exit;
 }
 
@@ -21,10 +26,9 @@ $pass = $_SERVER['DB_PASS'] ?? null;
 $dbname = $_SERVER['DB_NAME'] ?? null;
 $dsn = "mysql:host={$host};dbname={$dbname};port={$port};charset=utf8mb4";
 if (!$user || !$pass || !$dbname) {
-    http_response_code(500);
-    echo json_encode([
-        "error" => "Database configuration is missing."
-    ]);
+    http_response_code(500); // Internal Server Error
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(["error" => "Database configuration is missing."]);
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] == 'GET') {
@@ -39,10 +43,9 @@ try {
     ];
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode([
-        "error" => "Database connection error: " . $e->getMessage()
-    ]);
+    http_response_code(500); // Internal Server Error
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(["error" => "Database connection error."]);
     exit;
 }
 
@@ -70,7 +73,8 @@ if (str_starts_with($api_path, $api_base)) {
 }
 $segments = explode('/', trim($api_path, '/'));
 if ($segments[0] !== 'api') {
-    http_response_code(404);
+    http_response_code(400); // Bad Request
+    header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['error' => 'Invalid API path']);
     exit;
 }
@@ -89,7 +93,8 @@ if ($resource === 'mountains') {
             $y = substr($y, 0, -8);
         }
         if (!is_numeric($z) || !is_numeric($x) || !is_numeric($y)) {
-            http_response_code(400);
+            http_response_code(400); // Bad Request
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['error' => 'Invalid tile coordinates']);
             exit;
         }
@@ -118,7 +123,8 @@ if ($resource === 'mountains') {
             $stmt->execute([$source_id]);
             $row = $stmt->fetch();
             if (!$row) {
-                http_response_code(400);
+                http_response_code(400); // Bad Request
+                header('Content-Type: application/json; charset=utf-8');
                 echo json_encode(['error' => 'Invalid source ID']);
                 exit;
             }
@@ -138,6 +144,78 @@ if ($resource === 'mountains') {
             ");
             $stmt->execute([$source_id, $min_x, $max_x, $min_y, $max_y, $zoom]);
         }
+
+        header("Content-Type: application/geo+json; charset=utf-8");
+        $max_age = 604800; # 7 days
+        header("Cache-Control: public, max-age={$max_age}, stale-while-revalidate=86400");
+
+        echo '{"type": "FeatureCollection", "features": [';
+        $first = true;
+        while ($row = $stmt->fetch()) {
+            if (!$first) echo ',';
+            $feature = [
+                "id" => (int)$row['id'],
+                "type" => "Feature",
+                "geometry" => [
+                    "type" => "Point",
+                    "coordinates" => [(float)$row['lon'], (float)$row['lat']]
+                ],
+                "properties" => [
+                    "name" => $row['name'],
+                    "z_min" => (int)($row['z_min'] ?? 13)
+                ]
+            ];
+            echo json_encode($feature, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
+            $first = false;
+        }
+        echo ']}';
+
+    // ----------------------------------------------------
+    // 情報源一覧: /api/mountains/sources
+    // ----------------------------------------------------
+    } elseif ($action === 'sources') {
+        $stmt = $pdo->query("
+            SELECT id, display_name
+            FROM information_sources
+            WHERE info_type IN ('BOOK', 'WEBPAGE')
+            ORDER BY id
+        ");
+        $results = $stmt->fetchAll();
+        header("Content-Type: application/json; charset=utf-8");
+        header('Cache-Control: no-store, max-age=0');
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
+
+    // ----------------------------------------------------
+    // 情報源毎 geojson: /api/mountains/geojson?source={source_id}
+    // ----------------------------------------------------
+    } elseif ($action === 'geojson') {
+        $source_id = $_GET['source'] ?? 0;
+        $stmt = $pdo->prepare("
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_sources
+                WHERE id = ? AND info_type IN ('BOOK', 'WEBPAGE')
+            ) AS is_exist;
+        ");
+        $stmt->execute([$source_id]);
+        $is_exist = $stmt->fetchColumn();
+        if (!$is_exist) {
+            http_response_code(400); // Bad Request
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Invalid source ID']);
+            exit;
+        }
+        $stmt = $pdo->prepare("
+            SELECT
+                m.id,
+                p.poi_name AS name,
+                m.lat,
+                m.lon,
+                m.z_min
+            FROM mountain_pois AS m
+            JOIN poi_names AS p ON m.id = p.mountain_id AND p.source_id = ? AND p.name_type = 'MAIN'
+        ");
+        $stmt->execute([$source_id]);
 
         header("Content-Type: application/geo+json; charset=utf-8");
         $max_age = 604800; # 7 days
@@ -272,7 +350,8 @@ if ($resource === 'mountains') {
         $lat = $coordinates['lat'];
         $lon = $coordinates['lon'];
         if (!($lat && $lon)) {
-            http_response_code(400);
+            http_response_code(400); // Bad Request
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['error' => 'Invalid latitude or longitude']);
             exit;
         }
@@ -311,7 +390,8 @@ if ($resource === 'mountains') {
         echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
 
     } elseif (!is_numeric($action)) {
-        http_response_code(400);
+        http_response_code(400); // Bad Request
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['error' => 'Invalid mountain ID']);
         exit;
 
@@ -363,7 +443,8 @@ if ($resource === 'mountains') {
         $stmt->execute([$mountain_id]);
         $results = $stmt->fetch();
         if (!$results) {
-            http_response_code(404);
+            http_response_code(404); // Not Found
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['error' => 'Not Found']);
             exit;
         }
@@ -460,7 +541,8 @@ if ($resource === 'mountains') {
     $lat = $coordinates['lat'];
     $lon = $coordinates['lon'];
     if (!($lat && $lon)) {
-        http_response_code(400);
+        http_response_code(400); // Bad Request
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['error' => 'Invalid latitude or longitude']);
         exit;
     }
@@ -499,7 +581,8 @@ if ($resource === 'mountains') {
     header('Cache-Control: no-store, max-age=0');
     echo json_encode($results, JSON_UNESCAPED_UNICODE);
 } else {
-    http_response_code(404);
+    http_response_code(404); // Not Found
+    header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['error' => 'Invalid Resource']);
 }
 

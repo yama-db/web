@@ -1,4 +1,4 @@
-// omap.js
+// mountain.js
 import {install} from 'ga-gtag';
 install(import.meta.env.VITE_GTAG2);
 
@@ -12,6 +12,8 @@ import Stroke from 'ol/style/Stroke';
 import Icon from 'ol/style/Icon';
 import Text from 'ol/style/Text';
 import Style from 'ol/style/Style';
+import VectorLayer from 'ol/layer/Vector';
+import VectorSource from 'ol/source/Vector';
 import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTileSource from 'ol/source/VectorTile';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -27,7 +29,8 @@ import {fromStringYX} from './transangle.js';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 
-// const api_base = 'https://map.jpn.org';
+import category from './category.json';
+
 const api_base = import.meta.env.VITE_API_BASE;
 
 const param = { lon: 138.9853, lat: 36.5039, zoom: 10 };
@@ -60,7 +63,8 @@ const std = new TileLayer({
     url: 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'
   }),
   title: '標準',
-  type: 'base'
+  type: 'base',
+  preload: Infinity
 });
 
 const pale = new TileLayer({
@@ -70,7 +74,8 @@ const pale = new TileLayer({
   }),
   title: '淡色',
   type: 'base',
-  visible: false
+  visible: false,
+  preload: Infinity
 });
 
 const seamlessphoto = new TileLayer({
@@ -80,7 +85,8 @@ const seamlessphoto = new TileLayer({
   }),
   title: '写真',
   type: 'base',
-  visible: false
+  visible: false,
+  preload: Infinity
 });
 
 let current_zoom = view.getZoom();
@@ -94,12 +100,12 @@ const img_y = new Icon({ src: 'https://map.jpn.org/icon/902031.png', declutterMo
 const img = [ img_r, img_r, img_r, img_r, img_r, img_y, img_w ];
 
 function styleFunction(feature) {
-  let style;
   const type = feature.getGeometry().getType();
   const z_min = feature.get('z_min');
   if (current_zoom < z_min || z_min < 7 || z_min > 13) {
     return null;
   }
+  let style = {};
   if (type === 'Point') {
     style = {
       image: img[z_min - 7],
@@ -111,18 +117,20 @@ function styleFunction(feature) {
         textAlign: 'left',
         offsetX: 12,
         offsetY: 3
-      }),
-      zIndex: feature.get('elev')
+      })
     };
   }
   return new Style(style);
 }
 
-const sanmei = new VectorTileLayer({
+const sanmei = [];
+
+sanmei[0] = new VectorTileLayer({
   source: new VectorTileSource({
     url: api_base + '/api/mountains/xyz/{z}/{x}/{y}.geojson',
     format: new GeoJSON()
   }),
+  title: '全国',
   style: styleFunction,
   declutter: true
 });
@@ -136,7 +144,7 @@ const popup = new Popup({ autoPan: false });
 
 const map = new Map({
   target: 'map',
-  layers: [ std, pale, seamlessphoto, sanmei ],
+  layers: [ std, pale, seamlessphoto, sanmei[0] ],
   view,
   controls: [zoom, scaleLine, centercross, toolbar, searchbar],
   overlays: [popup]
@@ -153,12 +161,52 @@ toolbar.setBaseSelect('tb_base');
 toolbar.setZoomSelect('tb_zoom', (zoom) => {
   view.setZoom(zoom);
   current_zoom = zoom;
-  sanmei.getSource().changed();
 });
-// toolbar.setSourceSelect('tb_source');
 toolbar.setCreditButton('tb_help', 'help.html');
 toolbar.setLayerCheckbox('tb_sanmei', sanmei);
 toolbar.setControlCheckbox('tb_cross', centercross);
+
+category.unshift({ id: 0, display_name: '全国' });
+category.forEach((item, index) => {
+  if (index == 0) { return; } // 全国はすでに sanmei[0] にある
+  sanmei[index] = new VectorLayer({
+    source: new VectorSource({
+      url: api_base + '/api/mountains/geojson?source=' + item.id,
+      format: new GeoJSON()
+    }),
+    title: item.display_name,
+    style: styleFunction,
+    declutter: true,
+    visible: false
+  });
+  map.addLayer(sanmei[index]);
+});
+
+function fitToLayer(layer) {
+  const source = layer.getSource();
+  const applyFit = () => {
+    const extent = source.getExtent();
+    map.getView().fit(extent, {
+      padding: [10, 10, 10, 10],
+      maxZoom: 16
+    });
+  };
+  if (source.getState() === 'ready' && source.getFeatures().length > 0) {
+    applyFit();
+  } else {
+    source.once('featuresloadend', applyFit);
+  }
+}
+
+toolbar.setSourceSelect('tb_source', category, (_value, index) => {
+  sanmei.forEach((layer, i) => {
+    layer.setVisible(i == index);
+  });
+  map.updateSize();
+  if (index > 0) {
+    fitToLayer(sanmei[index]);
+  }
+});
 
 const result = document.getElementById('result');
 document.getElementById('tb_result').addEventListener('click', function (_event) {
@@ -413,12 +461,17 @@ map.on('pointermove', function (evt) {
 
 map.on('moveend', function (_evt) {
   current_zoom = view.getZoom();
-  sanmei.changed();
+  sanmei.forEach((layer) => {
+    if (layer && layer.getVisible()) {
+      layer.changed();
+    }
+  });
 }, passive);
 
 const tb_exit = document.getElementById('tb_exit');
 
 window.addEventListener('DOMContentLoaded', function (_event) {
+  map.updateSize();
   let text, handler;
   if (window.opener) {
     text = '✖︎';
@@ -443,4 +496,5 @@ window.addEventListener('beforeunload', function (_event) {
     localStorage.setItem(key, param[key]);
   }
 }, passive);
+
 // __END__
