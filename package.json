@@ -33,9 +33,11 @@
     "vite-plugin-env-compatible": "^2.0.1"
   },
   "dependencies": {
+    "ga-gtag": "^1.2.0",
     "ol": "^10.10.0",
     "ol-layerswitcher": "^4.1.2",
-    "ol-popup": "^5.1.1"
+    "ol-popup": "^5.1.1",
+    "tippy.js": "^6.3.7"
   },
   "browserslist": [
     "defaults"
