@@ -1,5 +1,6 @@
 RewriteEngine On
-RewriteBase /~tad/test/
+RewriteBase __API_BASE__
+RewriteRule ^ - [E=API_BASE:__API_BASE__,E=APP_ENV:__APP_ENV__]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ /~tad/test/api.php [QSA,L]
+RewriteRule ^(.*)$ __API_PATH__ [QSA,L]
