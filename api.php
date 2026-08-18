@@ -374,13 +374,12 @@ if ($resource === 'mountains') {
         }
 
         // 外部情報源のurlを取得
-        $stmt = $pdo->query("
-            SELECT source_table, display_name, url
-            FROM information_sources
-            WHERE source_table IN ('stg_wikidata_pois', 'stg_yamap_pois', 'stg_yamareco_pois')
-            ORDER BY id
-        ");
-        $isrc = $stmt->fetchAll();
+        $external_sources = [];
+        $isrc = [
+            'ウィキ' => 'https://www.wikidata.org/wiki/Special:GoToLinkedPage/jawiki/{raw_id}',
+            'ヤマップ' => 'https://yamap.com/landmarks/{raw_id}',
+            'ヤマレコ' => 'https://www.yamareco.com/modules/yamainfo/ptinfo.php?ptid={raw_id}'
+        ];
         $stmt = $pdo->prepare("
             SELECT MAX(raw_id) AS raw_id FROM stg_wikidata_pois WHERE mountain_id = ?
             UNION ALL
@@ -389,14 +388,13 @@ if ($resource === 'mountains') {
             SELECT MAX(raw_id) AS raw_id FROM stg_yamareco_pois WHERE mountain_id = ?
         ");
         $stmt->execute([$mountain_id, $mountain_id, $mountain_id]);
-        $rows = $stmt->fetchAll();
-        $external_sources = [];
-        for ($i = 0; $i < count($rows); $i++) {
-            $raw_id = $rows[$i]['raw_id'];
+        $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        for ($index = 0; $index < count($isrc); $index++) {
+            $raw_id = $rows[$index];
             if ($raw_id === null) continue;
             $external_sources[] = [
-                'display_name' => $isrc[$i]['display_name'],
-                'url' => str_replace('{raw_id}', $raw_id, $isrc[$i]['url'])
+                'display_name' => array_keys($isrc)[$index],
+                'url' => str_replace('{raw_id}', $raw_id, array_values($isrc)[$index])
             ];
         }
         $results['external_sources'] = $external_sources;
