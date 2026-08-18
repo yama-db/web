@@ -383,9 +383,9 @@ if ($resource === 'mountains') {
         $isrc = $stmt->fetchAll();
         $stmt = $pdo->prepare("
             SELECT MAX(raw_id) AS raw_id FROM stg_wikidata_pois WHERE mountain_id = ?
-            UNION
+            UNION ALL
             SELECT MAX(raw_id) AS raw_id FROM stg_yamap_pois WHERE mountain_id = ?
-            UNION
+            UNION ALL
             SELECT MAX(raw_id) AS raw_id FROM stg_yamareco_pois WHERE mountain_id = ?
         ");
         $stmt->execute([$mountain_id, $mountain_id, $mountain_id]);
