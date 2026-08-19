@@ -407,10 +407,10 @@ if ($resource === 'mountains') {
                 MAX(p.is_preferred) AS is_preferred,
                 GROUP_CONCAT(
                     isrc.display_name 
-                    ORDER BY isrc.reliability_level ASC, isrc.id ASC 
+                    ORDER BY isrc.reliability_rank ASC, isrc.id ASC 
                     SEPARATOR ','
                 ) AS auth_list,
-                MIN(isrc.reliability_level) AS min_reliability
+                MIN(isrc.reliability_rank) AS min_reliability
             FROM poi_names AS p
             JOIN information_sources AS isrc ON p.source_id = isrc.id AND p.mountain_id = ?
             GROUP BY p.poi_name, p.poi_kana
