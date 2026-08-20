@@ -17,6 +17,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTileSource from 'ol/source/VectorTile';
 import GeoJSON from 'ol/format/GeoJSON';
+import MVT from 'ol/format/MVT';
 import Zoom from 'ol/control/Zoom';
 import ScaleLine from 'ol/control/ScaleLine';
 import Popup from 'ol-popup';
@@ -101,6 +102,7 @@ const img_y = new Icon({ src: 'https://map.jpn.org/icon/902031.png', declutterMo
 const img = [ img_r, img_r, img_r, img_r, img_r, img_y, img_w ];
 
 function styleFunction(feature) {
+  // console.log(JSON.stringify(feature, null, 2));
   const type = feature.getGeometry().getType();
   const z_min = feature.get('z_min');
   if (current_zoom < z_min || z_min < 7 || z_min > 13) {
@@ -128,8 +130,9 @@ const sanmei = [];
 
 sanmei[0] = new VectorTileLayer({
   source: new VectorTileSource({
-    url: api_base + '/api/mountains/xyz/{z}/{x}/{y}.geojson',
-    format: new GeoJSON()
+    url: api_base + '/api/mountains/xyz/{z}/{x}/{y}.pbf',
+    format: new MVT(),
+    maxZoom: 13
   }),
   title: category[0].display_name,
   style: styleFunction,
@@ -172,7 +175,8 @@ category.forEach((item, index) => {
   sanmei[index] = new VectorLayer({
     source: new VectorSource({
       url: api_base + '/api/mountains/geojson?source=' + item.id,
-      format: new GeoJSON()
+      format: new GeoJSON(),
+      maxZoom: 13
     }),
     title: item.display_name,
     style: styleFunction,
@@ -321,6 +325,7 @@ function todms(deg) {
 }
 
 async function getMountainDetail(id) {
+  console.log('getMountainDetail', id);
   try {
       const response = await fetch(api_base + '/api/mountains/' + id);
       if (!response.ok) {
@@ -432,17 +437,27 @@ function displayMountainInfo(data) {
 }
 
 map.on('click', function (evt) {
+  let id;
+  let type;
   let coordinate;
   let html;
   map.forEachFeatureAtPixel(
     evt.pixel,
-    function (feature, _layer) {
-      const geometry = feature.getGeometry();
-      if (geometry.getType() !== 'Point') {
+    function (feature, layer) {
+      if (layer instanceof VectorTileLayer) {
+        id = feature.get('id');
+        type = feature.getType();
+        coordinate = feature.getFlatCoordinates();
+      } else {
+        id = feature.getId();
+        const geometry = feature.getGeometry();
+        type = geometry.getType();
+        coordinate = geometry.getCoordinates();
+      }
+      if (type !== 'Point') {
         return false;
       }
-      getMountainDetail(feature.getId());
-      coordinate = geometry.getCoordinates();
+      getMountainDetail(id);
       html = '<h2>'
         + feature.get('name')
         + '</h2><table><tbody id="mountain-info"><tr><td>読み込み中</td></tr></tbody></table>';

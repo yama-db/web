@@ -64,7 +64,7 @@ function get_lat_lon()
     return filter_input_array(INPUT_GET, $args);
 }
 
-function output_geojson(PDOStatement $rows): void
+function output_geojson(array $rows): void
 {
     header("Content-Type: application/geo+json; charset=utf-8");
     $max_age = 604800; # 7 days
@@ -72,7 +72,7 @@ function output_geojson(PDOStatement $rows): void
 
     echo '{"type": "FeatureCollection", "features": [';
     $first = true;
-    while ($row = $rows->fetch()) {
+    foreach ($rows as $row) {
         if (!$first) echo ',';
         $feature = [
             "id" => (int)$row['id'],
@@ -90,6 +90,126 @@ function output_geojson(PDOStatement $rows): void
         $first = false;
     }
     echo ']}';
+}
+
+// ==========================================
+// 外部ライブラリ不要：POI専用 MVT エンコーダー
+// ==========================================
+class SimpleMvtPointEncoder {
+    // 整数を Varint (可変長バイト列) に変換
+    private static function encodeVarint($val) {
+        $buf = '';
+        while ($val >= 0x80) {
+            $buf .= chr(($val & 0x7F) | 0x80);
+            $val >>= 7;
+        }
+        $buf .= chr($val);
+        return $buf;
+    }
+
+    // 符号付き整数を ZigZag 符号化
+    private static function zigZag($n) {
+        return ($n << 1) ^ ($n >> 63);
+    }
+
+    // Protocol Buffers フィールド生成
+    private static function field($fieldNum, $wireType, $data) {
+        $tag = ($fieldNum << 3) | $wireType;
+        if ($wireType === 2) { // Length-delimited
+            return self::encodeVarint($tag) . self::encodeVarint(strlen($data)) . $data;
+        }
+        return self::encodeVarint($tag) . $data;
+    }
+
+    // MVT Value メッセージの生成 (型に応じた適切なフィールド番号を指定)
+    private static function encodeValue($val) {
+        if (is_int($val)) {
+            // int_value はフィールド番号 4 (int64)
+            return self::field(4, 0, self::encodeVarint($val));
+        } elseif (is_bool($val)) {
+            // bool_value はフィールド番号 7
+            return self::field(7, 0, self::encodeVarint($val ? 1 : 0));
+        } else {
+            // string_value はフィールド番号 1 (string)
+            return self::field(1, 2, (string)$val);
+        }
+    }
+
+    /**
+     * POI配列から MVT バイナリを生成
+     */
+    public static function build($layerName, array $pois, $extent = 4096) {
+        $keys = [];
+        $values = [];
+        $keyMap = [];
+        $valMap = [];
+        $featuresBin = '';
+
+        foreach ($pois as $poi) {
+            $tags = [];
+            foreach ($poi as $k => $v) {
+                // 内部座標キーはプロパティに含めない
+                if ($k === 'target_x' || $k === 'target_y') continue;
+
+                // keys の辞書登録
+                if (!isset($keyMap[$k])) {
+                    $keyMap[$k] = count($keys);
+                    $keys[] = (string)$k;
+                }
+                $tags[] = $keyMap[$k];
+
+                // values の辞書登録 (型と値を厳密にハッシュ化)
+                $valHash = gettype($v) . ':' . $v;
+                if (!isset($valMap[$valHash])) {
+                    $valMap[$valHash] = count($values);
+                    $values[] = $v;
+                }
+                $tags[] = $valMap[$valHash];
+            }
+
+            // ジオメトリ命令: MoveTo(1) | Count(1) << 3 = 9
+            $geomCmd = self::encodeVarint(9);
+            $geomCmd .= self::encodeVarint(self::zigZag((int)$poi['target_x']));
+            $geomCmd .= self::encodeVarint(self::zigZag((int)$poi['target_y']));
+
+            // Feature メッセージ組み立て
+            $f = '';
+            if (isset($poi['id'])) {
+                // feature.id (フィールド番号 1, uint64)
+                $f .= self::field(1, 0, self::encodeVarint((int)$poi['id']));
+            }
+            if (!empty($tags)) {
+                // feature.tags (フィールド番号 2, packed uint32)
+                $tagBin = '';
+                foreach ($tags as $t) {
+                    $tagBin .= self::encodeVarint($t);
+                }
+                $f .= self::field(2, 2, $tagBin);
+            }
+            // feature.type = POINT (1) (フィールド番号 3)
+            $f .= self::field(3, 0, self::encodeVarint(1));
+            // feature.geometry (フィールド番号 4)
+            $f .= self::field(4, 2, $geomCmd);
+
+            $featuresBin .= self::field(2, 2, $f); // Layer.features はフィールド番号 2
+        }
+
+        // Layer メッセージ組み立て
+        $layer = '';
+        $layer .= self::field(15, 0, self::encodeVarint(2));          // version = 2
+        $layer .= self::field(1, 2, $layerName);                      // name
+        $layer .= $featuresBin;                                       // features
+        foreach ($keys as $k) {
+            $layer .= self::field(3, 2, $k);                          // keys
+        }
+        foreach ($values as $v) {
+            $layer .= self::field(4, 2, self::encodeValue($v));       // values
+        }
+        $layer .= self::field(5, 0, self::encodeVarint($extent));     // extent
+
+        // タイル全体（Tile メッセージ内の layers (フィールド番号 3)）
+        return self::field(3, 2, $layer);
+    }
 }
 
 $request_uri = $_SERVER['REQUEST_URI'];
@@ -111,40 +231,100 @@ $action = $segments[2] ?? '';
 
 if ($resource === 'mountains') {
     // ----------------------------------------------------
-    // 山名ベクトルタイル: /api/mountains/xyz/{z}/{x}/{y}.geojson
+    // 山名ベクトルタイル: /api/mountains/xyz/{z}/{x}/{y}.pbf or .geojson
     // ----------------------------------------------------
     if ($action === 'xyz') {
         $z = $segments[3] ?? null;
         $x = $segments[4] ?? null;
         $y = $segments[5] ?? null;
-        if (str_ends_with($y, '.geojson')) {
-            $y = substr($y, 0, -8);
+        $ext = null;
+        foreach (['.pbf', '.geojson'] as $s) {
+            if (str_ends_with($y, $s)) {
+                $y = substr($y, 0, -strlen($s));
+                $ext = $s;
+                break;
+            }
         }
-        if (!is_numeric($z) || !is_numeric($x) || !is_numeric($y)) {
+        if (!$ext || !is_numeric($z) || !is_numeric($x) || !is_numeric($y)) {
             http_response_code(400); // Bad Request
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['error' => 'Invalid tile coordinates']);
             exit;
         }
 
-        $diff_z = 18 - $z;
+        $diff_z = 13 - $z;
         $min_x = $x << $diff_z;
         $max_x = (($x + 1) << $diff_z) - 1;
         $min_y = $y << $diff_z;
         $max_y = (($y + 1) << $diff_z) - 1;
         $zoom = $z + 1; // ラスタタイルのズームレベルを計算
 
-        $stmt = $pdo->prepare("
-            SELECT id, main_name AS name, lat, lon, z_min
-            FROM mountain_pois
-            WHERE is_used
-                AND x_z18 BETWEEN ? AND ?
-                AND y_z18 BETWEEN ? AND ?
-                AND z_min <= ?
-                AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
-        ");
-        $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
-        output_geojson($stmt);
+        if ($ext === '.geojson') {
+            $stmt = $pdo->prepare("
+                SELECT
+                    id, main_name AS name, lat, lon, z_min
+                FROM mountain_pois
+                WHERE is_used
+                    AND tile_x_z13 BETWEEN ? AND ?
+                    AND tile_y_z13 BETWEEN ? AND ?
+                    AND z_min <= ?
+                    AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
+            ");
+            $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
+            $rows = $stmt->fetchAll();
+            output_geojson($rows);
+        } elseif ($ext === '.pbf') {
+            $stmt = $pdo->prepare("
+                SELECT
+                    id, main_name AS name, tile_x_z13, tile_y_z13, local_y_z13, local_x_z13, z_min
+                FROM mountain_pois
+                WHERE is_used
+                    AND tile_x_z13 BETWEEN ? AND ?
+                    AND tile_y_z13 BETWEEN ? AND ?
+                    AND z_min <= ?
+                    AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
+            ");
+            $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
+            $rows = $stmt->fetchAll();
+
+            // $tile_z_min = 7;
+            // $tile_z_max = 13;
+            // $fixed_point_range = $tile_z_max - $tile_z_min;
+            // $extent = 1 << 12; // 4096
+
+            $shift = 6 + $diff_z;
+            $round_bias = 1 << ($shift - 1);
+            $mask = (1 << $diff_z) - 1;
+            $pois = [];
+            foreach ($rows as $row) {
+                $local_x_z13 = (int)$row['local_x_z13'];
+                $local_y_z13 = (int)$row['local_y_z13'];
+                $tile_x_z13 = (int)$row['tile_x_z13'];
+                $tile_y_z13 = (int)$row['tile_y_z13'];
+                $offset_x = ($tile_x_z13 & $mask) << 18; // NOTE: $extent = 2^12, $fixed_point_range = 6
+                $offset_y = ($tile_y_z13 & $mask) << 18;
+                $target_x = ($local_x_z13 + $offset_x + $round_bias) >> $shift;
+                $target_y = ($local_y_z13 + $offset_y + $round_bias) >> $shift;
+                $pois[] = [
+                    "id" => (int)$row['id'],
+                    "name" => $row['name'],
+                    "target_x" => (int)$target_x,
+                    "target_y" => (int)$target_y,
+                    "z_min" => (int)($row['z_min'] ?? 13)
+                ];
+            }
+            $pbf = SimpleMvtPointEncoder::build('pois', $pois, 4096);
+            $compressed = gzencode($pbf);
+
+            header("Content-Type: application/x-protobuf");
+            header("Content-Encoding: gzip");
+            echo $compressed;
+        } else {
+            http_response_code(400); // Bad Request
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Invalid tile format']);
+            exit;
+        }
 
     // ----------------------------------------------------
     // 情報源毎 geojson: /api/mountains/geojson?source={source_id}
@@ -163,7 +343,8 @@ if ($resource === 'mountains') {
             JOIN information_sources AS s ON p.source_id = s.id AND s.info_type != 'DATASET'
         ");
         $stmt->execute([$source_id]);
-        output_geojson($stmt);
+        $rows = $stmt->fetchAll();
+        output_geojson($rows);
 
     // ----------------------------------------------------
     // 山名検索: /api/mountains/search?q=xxx&source={source_id}
