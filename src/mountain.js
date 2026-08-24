@@ -98,20 +98,21 @@ const stroke = new Stroke({ color: 'white', width: 2 });
 const img_w = new Icon({ src: 'https://map.jpn.org/icon/902029.png', declutterMode: 'none' });
 const img_r = new Icon({ src: 'https://map.jpn.org/icon/902030.png', declutterMode: 'none' });
 const img_y = new Icon({ src: 'https://map.jpn.org/icon/902031.png', declutterMode: 'none' });
-// z_min          7,     8,     9,    10,    11,    12,    13
-const img = [ img_r, img_r, img_r, img_r, img_r, img_y, img_w ];
+// grade          0,     1,     2,     3,     4,     5,     6,     7
+const img = [ img_r, img_r, img_r, img_r, img_r, img_y, img_w, img_w ];
 
 function styleFunction(feature) {
   // console.log(JSON.stringify(feature, null, 2));
   const type = feature.getGeometry().getType();
   const z_min = feature.get('z_min');
+  const grade = feature.get('grade');
   if (current_zoom < z_min || z_min < 7 || z_min > 13) {
     return null;
   }
   let style = {};
   if (type === 'Point') {
     style = {
-      image: img[z_min - 7],
+      image: img[grade],
       text: new Text({
         text: feature.get('name'),
         font: '14px sans-serif',
@@ -325,7 +326,6 @@ function todms(deg) {
 }
 
 async function getMountainDetail(id) {
-  console.log('getMountainDetail', id);
   try {
       const response = await fetch(api_base + '/api/mountains/' + id);
       if (!response.ok) {

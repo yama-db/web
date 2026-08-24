@@ -83,7 +83,8 @@ function output_geojson(array $rows): void
             ],
             "properties" => [
                 "name" => $row['name'],
-                "z_min" => (int)($row['z_min'] ?? 13)
+                "z_min" => (int)($row['z_min'] ?? 13),
+                "grade" => (int)($row['grade'] ?? 7)
             ]
         ];
         echo json_encode($feature, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
@@ -97,7 +98,7 @@ function output_geojson(array $rows): void
 // ==========================================
 class SimpleMvtPointEncoder {
     // 整数を Varint (可変長バイト列) に変換
-    private static function encodeVarint($val) {
+    private static function encodeVarint(int $val): string {
         $buf = '';
         while ($val >= 0x80) {
             $buf .= chr(($val & 0x7F) | 0x80);
@@ -108,12 +109,12 @@ class SimpleMvtPointEncoder {
     }
 
     // 符号付き整数を ZigZag 符号化
-    private static function zigZag($n) {
+    private static function zigZag(int $n): int {
         return ($n << 1) ^ ($n >> 63);
     }
 
     // Protocol Buffers フィールド生成
-    private static function field($fieldNum, $wireType, $data) {
+    private static function field(int $fieldNum, int $wireType, string $data): string {
         $tag = ($fieldNum << 3) | $wireType;
         if ($wireType === 2) { // Length-delimited
             return self::encodeVarint($tag) . self::encodeVarint(strlen($data)) . $data;
@@ -122,7 +123,7 @@ class SimpleMvtPointEncoder {
     }
 
     // MVT Value メッセージの生成 (型に応じた適切なフィールド番号を指定)
-    private static function encodeValue($val) {
+    private static function encodeValue(mixed $val): string {
         if (is_int($val)) {
             // int_value はフィールド番号 4 (int64)
             return self::field(4, 0, self::encodeVarint($val));
@@ -138,7 +139,7 @@ class SimpleMvtPointEncoder {
     /**
      * POI配列から MVT バイナリを生成
      */
-    public static function build($layerName, array $pois, $extent = 4096) {
+    public static function build(string $layerName, array $pois, int $extent = 4096): string {
         $keys = [];
         $values = [];
         $keyMap = [];
@@ -262,7 +263,7 @@ if ($resource === 'mountains') {
         if ($ext === '.geojson') {
             $stmt = $pdo->prepare("
                 SELECT
-                    id, main_name AS name, lat, lon, z_min
+                    id, main_name AS name, lat, lon, z_min, point_grade AS grade
                 FROM mountain_pois
                 WHERE is_used
                     AND tile_x_z13 BETWEEN ? AND ?
@@ -276,7 +277,7 @@ if ($resource === 'mountains') {
         } elseif ($ext === '.pbf') {
             $stmt = $pdo->prepare("
                 SELECT
-                    id, main_name AS name, tile_x_z13, tile_y_z13, local_y_z13, local_x_z13, z_min
+                    id, main_name AS name, tile_x_z13, tile_y_z13, local_y_z13, local_x_z13, z_min, point_grade AS grade
                 FROM mountain_pois
                 WHERE is_used
                     AND tile_x_z13 BETWEEN ? AND ?
@@ -310,7 +311,8 @@ if ($resource === 'mountains') {
                     "name" => $row['name'],
                     "target_x" => (int)$target_x,
                     "target_y" => (int)$target_y,
-                    "z_min" => (int)($row['z_min'] ?? 13)
+                    "z_min" => (int)($row['z_min'] ?? 13),
+                    "grade" => (int)($row['grade'] ?? 7)
                 ];
             }
             $pbf = SimpleMvtPointEncoder::build('pois', $pois, 4096);
@@ -337,7 +339,8 @@ if ($resource === 'mountains') {
                 p.poi_name AS name,
                 m.lat,
                 m.lon,
-                m.z_min
+                m.z_min,
+                m.point_grade AS grade
             FROM mountain_pois AS m
             JOIN poi_names AS p ON m.id = p.mountain_id AND p.source_id = ? AND p.name_type = 'MAIN'
             JOIN information_sources AS s ON p.source_id = s.id AND s.info_type != 'DATASET'
