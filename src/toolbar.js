@@ -181,9 +181,12 @@ export default class Toolbar extends Control {
     category.forEach((item, _index) => {
       element.appendChild(new Option(item.display_name, item.id));
     });
+    this.current_source_index = 0;
     element.addEventListener('change', _event => {
       const index = element.selectedIndex;
       const value = element.options[index].value;
+      this.current_source_index = index;
+      this.element_layer_checkbox.checked = true;
       handler(value, index);
     }, passive);
   }
@@ -196,9 +199,9 @@ export default class Toolbar extends Control {
   }
 
   setLayerCheckbox(id, layer) {
-    const element = document.getElementById(id);
-    element.addEventListener('change', _event => {
-      layer.setVisible(element.checked);
+    this.element_layer_checkbox = document.getElementById(id);
+    this.element_layer_checkbox.addEventListener('change', _event => {
+      layer[this.current_source_index].setVisible(this.element_layer_checkbox.checked);
     }, passive);
   }
 
