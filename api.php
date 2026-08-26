@@ -263,7 +263,7 @@ if ($resource === 'mountains') {
         if ($ext === '.geojson') {
             $stmt = $pdo->prepare("
                 SELECT
-                    id, main_name AS name, lat, lon, z_min, point_grade AS grade
+                    id, main_name AS name, lat, lon, z_min, grade
                 FROM mountain_pois
                 WHERE is_used
                     AND tile_x_z13 BETWEEN ? AND ?
@@ -277,7 +277,7 @@ if ($resource === 'mountains') {
         } elseif ($ext === '.pbf') {
             $stmt = $pdo->prepare("
                 SELECT
-                    id, main_name AS name, tile_x_z13, tile_y_z13, local_y_z13, local_x_z13, z_min, point_grade AS grade
+                    id, main_name AS name, tile_x_z13, tile_y_z13, local_y_z13, local_x_z13, z_min, grade
                 FROM mountain_pois
                 WHERE is_used
                     AND tile_x_z13 BETWEEN ? AND ?
@@ -302,7 +302,7 @@ if ($resource === 'mountains') {
                 $local_y_z13 = (int)$row['local_y_z13'];
                 $tile_x_z13 = (int)$row['tile_x_z13'];
                 $tile_y_z13 = (int)$row['tile_y_z13'];
-                $offset_x = ($tile_x_z13 & $mask) << 18; // NOTE: $extent = 2^12, $fixed_point_range = 6
+                $offset_x = ($tile_x_z13 & $mask) << 18; // NOTE: log2($extent) + $fixed_point_range
                 $offset_y = ($tile_y_z13 & $mask) << 18;
                 $target_x = ($local_x_z13 + $offset_x + $round_bias) >> $shift;
                 $target_y = ($local_y_z13 + $offset_y + $round_bias) >> $shift;
@@ -340,7 +340,7 @@ if ($resource === 'mountains') {
                 m.lat,
                 m.lon,
                 m.z_min,
-                m.point_grade AS grade
+                m.grade
             FROM mountain_pois AS m
             JOIN poi_names AS p ON m.id = p.mountain_id AND p.source_id = ? AND p.name_type = 'MAIN'
             JOIN information_sources AS s ON p.source_id = s.id AND s.info_type != 'DATASET'
