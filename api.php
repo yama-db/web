@@ -83,8 +83,9 @@ function output_geojson(array $rows): void
             ],
             "properties" => [
                 "name" => $row['name'],
-                "z_min" => (int)($row['z_min'] ?? 13),
-                "grade" => (int)($row['grade'] ?? 7)
+                "label" => $row['label'],
+                "z_min" => (int)$row['z_min'],
+                "grade" => (int)$row['grade']
             ]
         ];
         echo json_encode($feature, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK);
@@ -263,13 +264,13 @@ if ($resource === 'mountains') {
         if ($ext === '.geojson') {
             $stmt = $pdo->prepare("
                 SELECT
-                    id, main_name AS name, lat, lon, z_min, grade
+                    id, main_name AS name, main_name AS label, lat, lon, z_min, grade
                 FROM mountain_pois
                 WHERE is_used
                     AND tile_x_z13 BETWEEN ? AND ?
                     AND tile_y_z13 BETWEEN ? AND ?
                     AND z_min <= ?
-                    AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
+                    AND main_child_id IS NULL
             ");
             $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
             $rows = $stmt->fetchAll();
@@ -277,13 +278,27 @@ if ($resource === 'mountains') {
         } elseif ($ext === '.pbf') {
             $stmt = $pdo->prepare("
                 SELECT
-                    id, main_name AS name, tile_x_z13, tile_y_z13, local_y_z13, local_x_z13, z_min, grade
-                FROM mountain_pois
-                WHERE is_used
-                    AND tile_x_z13 BETWEEN ? AND ?
-                    AND tile_y_z13 BETWEEN ? AND ?
-                    AND z_min <= ?
-                    AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = id)
+                    m.id,
+                    m.main_name AS name,
+                    m.tile_x_z13,
+                    m.tile_y_z13,
+                    m.z_min,
+                    m.grade,
+                    m.local_y_z13,
+                    m.local_x_z13,
+                    p.main_name AS parent_name,
+                    h.relation_type,
+                    h.is_representative
+                FROM mountain_pois AS m
+                LEFT JOIN poi_hierarchies AS h
+                    ON h.child_id = m.id
+                LEFT JOIN mountain_pois AS p
+                    ON p.id = h.parent_id
+                WHERE m.is_used
+                    AND m.tile_x_z13 BETWEEN ? AND ?
+                    AND m.tile_y_z13 BETWEEN ? AND ?
+                    AND m.z_min <= ?
+                    AND m.main_child_id IS NULL
             ");
             $stmt->execute([$min_x, $max_x, $min_y, $max_y, $zoom]);
             $rows = $stmt->fetchAll();
@@ -306,13 +321,31 @@ if ($resource === 'mountains') {
                 $offset_y = ($tile_y_z13 & $mask) << 18;
                 $target_x = ($local_x_z13 + $offset_x + $round_bias) >> $shift;
                 $target_y = ($local_y_z13 + $offset_y + $round_bias) >> $shift;
+                $name = $label = $row['name'];
+                $parent_name = $row['parent_name'] ?? null;
+                $relation_type = $row['relation_type'] ?? null;
+                $is_representative = (bool)($row['is_representative'] ?? false);
+                if ($relation_type === 'AREA_TO_PEAK') {
+                    if ($is_representative && $zoom <= 11) {
+                        $label = $parent_name;
+                        $name = $parent_name;
+                    }
+                } elseif ($relation_type === 'MAIN_TO_SUB_PEAK') {
+                    if ($is_representative) {
+                        $label = $parent_name;
+                        $name = "{$parent_name}（{$name}）";
+                    } else {
+                        $name = "{$parent_name}{$name}";
+                    }
+                }
                 $pois[] = [
                     "id" => (int)$row['id'],
-                    "name" => $row['name'],
+                    "name" => $name,
+                    "label" => $label,
                     "target_x" => (int)$target_x,
                     "target_y" => (int)$target_y,
-                    "z_min" => (int)($row['z_min'] ?? 13),
-                    "grade" => (int)($row['grade'] ?? 7)
+                    "z_min" => (int)$row['z_min'],
+                    "grade" => (int)$row['grade']
                 ];
             }
             $pbf = SimpleMvtPointEncoder::build('pois', $pois, 4096);
@@ -336,7 +369,8 @@ if ($resource === 'mountains') {
         $stmt = $pdo->prepare("
             SELECT
                 m.id,
-                p.poi_name AS name,
+                m.main_name AS name,
+                m.main_name AS label,
                 m.lat,
                 m.lon,
                 m.z_min,
@@ -436,7 +470,7 @@ if ($resource === 'mountains') {
                     )
                     OR (
                         m.id IN (SELECT mountain_id FROM matched_names)
-                        AND NOT EXISTS (SELECT 1 FROM poi_hierarchies WHERE parent_id = m.id)
+                        AND m.main_child_id IS NULL
                     )
                 )
                 ORDER BY m.elevation DESC
