@@ -86,3 +86,29 @@ form[name="form2"] > :last-child {
     margin-right: 1px;
     content: url(data:image/gif;base64,R0lGODlhCgAKAPAAAEuxRgAAACH5BAEAAAEALAAAAAAKAAoAAAIXTICJBuaX4JputnYyxfc+1inRx4lLUAAAOw==);
 }
+
+.ol-rotate {
+  top: 4rem !important;
+  left: .5em !important;
+  right: auto !important;
+}
+
+.ol-touch .ol-rotate {
+  top: 5rem;
+}
+
+.ol-attribution {
+  display: none;
+}
+
+@media screen and (max-width: 699px) {
+  .ol-scale-line {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 374px) {
+  .ol-zoom, .ol-rotate {
+    display: none;
+  }
+}

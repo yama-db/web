@@ -18,6 +18,7 @@ import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTileSource from 'ol/source/VectorTile';
 import GeoJSON from 'ol/format/GeoJSON';
 import MVT from 'ol/format/MVT';
+import Rotate from 'ol/control/Rotate';
 import Zoom from 'ol/control/Zoom';
 import ScaleLine from 'ol/control/ScaleLine';
 import Popup from 'ol-popup';
@@ -102,11 +103,10 @@ const img_y = new Icon({ src: 'https://map.jpn.org/icon/902031.png', declutterMo
 const img = [ img_r, img_r, img_r, img_r, img_r, img_y, img_w, img_w ];
 
 function styleFunction(feature) {
-  // console.log(JSON.stringify(feature, null, 2));
   const type = feature.getGeometry().getType();
   const z_min = feature.get('z_min');
   const grade = feature.get('grade');
-  if (current_zoom < z_min || z_min < 7 || z_min > 13) {
+  if (current_zoom < z_min) {
     return null;
   }
   let style = {};
@@ -114,7 +114,7 @@ function styleFunction(feature) {
     style = {
       image: img[grade],
       text: new Text({
-        text: feature.get('name'),
+        text: feature.get('label'),
         font: '14px sans-serif',
         fill: fill,
         stroke: stroke,
@@ -140,6 +140,7 @@ sanmei[0] = new VectorTileLayer({
   declutter: true
 });
 
+const rotate = new Rotate();
 const zoom = new Zoom();
 const scaleLine = new ScaleLine();
 const centercross = new CenterCross({ element: document.getElementById('centercross') });
@@ -151,7 +152,7 @@ const map = new Map({
   target: 'map',
   layers: [ std, pale, seamlessphoto, sanmei[0] ],
   view,
-  controls: [zoom, scaleLine, centercross, toolbar, searchbar],
+  controls: [rotate, zoom, scaleLine, centercross, toolbar, searchbar],
   overlays: [popup]
 });
 
